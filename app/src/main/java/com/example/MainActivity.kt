@@ -31,6 +31,12 @@ import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.ConnectNpTheme
 import com.example.ui.theme.NepalCrimson
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.credentials.CredentialManager
+import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.auth
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,15 +44,38 @@ class MainActivity : ComponentActivity() {
         setContent {
             val isDark by ConnectNpRepository.isDarkMode.collectAsStateWithLifecycle()
             ConnectNpTheme(darkTheme = isDark) {
-                ConnectNpMainApp()
+                AppContent()
             }
         }
     }
 }
 
+@Composable
+fun AppContent() {
+    var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+
+    DisposableEffect(Unit) {
+        val listener = FirebaseAuth.AuthStateListener { auth ->
+            currentUser = auth.currentUser
+        }
+        Firebase.auth.addAuthStateListener(listener)
+        onDispose {
+            Firebase.auth.removeAuthStateListener(listener)
+        }
+    }
+
+    if (currentUser == null) {
+        GoogleSignInScreen(
+            onAuthSuccess = { currentUser = Firebase.auth.currentUser }
+        )
+    } else {
+        ConnectNpMainApp(currentUserId = currentUser?.uid ?: "")
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConnectNpMainApp() {
+fun ConnectNpMainApp(currentUserId: String = "") {
     val posts by ConnectNpRepository.posts.collectAsStateWithLifecycle()
     val stories by ConnectNpRepository.stories.collectAsStateWithLifecycle()
     val reels by ConnectNpRepository.reels.collectAsStateWithLifecycle()

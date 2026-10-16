@@ -1,0 +1,148 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.handle is string && data.handle.size() >= 1 && data.handle.size() <= 50 &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
+             (!('walletBalance' in data) || (data.walletBalance is int && data.walletBalance >= 0)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidPost(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             data.authorHandle is string && data.authorHandle.size() >= 1 && data.authorHandle.size() <= 50 &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 5000 &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+             (!('location' in data) || (data.location is string && data.location.size() <= 100)) &&
+             (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidMarketItem(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.sellerName is string && data.sellerName.size() >= 1 && data.sellerName.size() <= 100 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.priceNpr is int && data.priceNpr >= 0 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+             data.location is string && data.location.size() >= 1 && data.location.size() <= 100 &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time));
+    }
+
+    function isValidWalletTransaction(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.amount is int && data.amount >= 0 &&
+             data.type is string && (data.type == 'credit' || data.type == 'debit') &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time));
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'name', 'handle', 'createdAt']) &&
+                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'walletBalance', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       isValidUserProfile(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'walletBalance', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      match /transactions/{transactionId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(transactionId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(transactionId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'title', 'amount', 'type', 'createdAt']) &&
+                         incoming().keys().hasOnly(['id', 'userId', 'title', 'amount', 'type', 'createdAt']) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidWalletTransaction(incoming());
+        allow update, delete: if false;
+      }
+    }
+
+    match /posts/{postId} {
+      allow get: if isSignedIn() && isValidId(postId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+                       isValidId(postId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'authorName', 'authorHandle', 'content', 'createdAt']) &&
+                       incoming().keys().hasOnly(['id', 'userId', 'authorName', 'authorHandle', 'content', 'location', 'likesCount', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       isValidPost(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(postId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidPost(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['content', 'location', 'likesCount', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(postId) && existing().userId == request.auth.uid;
+    }
+
+    match /market_items/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+                       isValidId(itemId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'sellerName', 'title', 'priceNpr', 'category', 'location', 'createdAt']) &&
+                       incoming().keys().hasOnly(['id', 'userId', 'sellerName', 'title', 'priceNpr', 'category', 'location', 'description', 'createdAt']) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       isValidMarketItem(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(itemId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidMarketItem(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'priceNpr', 'category', 'location', 'description']);
+      allow delete: if isSignedIn() && isValidId(itemId) && existing().userId == request.auth.uid;
+    }
+  }
+}

@@ -206,103 +206,91 @@ fun ConnectNpLoginDialog(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val scope = rememberCoroutineScope()
+                    val credentialManager = remember { androidx.credentials.CredentialManager.create(context) }
+                    val currentFirebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Text(
-                        text = "WELCOME TO CONNECTNP",
+                        text = "CONNECTNP ACCOUNT",
                         fontFamily = PoppinsFontFamily,
                         fontWeight = FontWeight.Black,
-                        fontSize = 20.sp,
+                        fontSize = 18.sp,
                         letterSpacing = 1.sp,
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center
                     )
 
-                    Text(
-                        text = "Sign in to connect, share moments, and earn across Nepal and the diaspora.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 18.dp)
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Input
-                    OutlinedTextField(
-                        value = emailOrPhone,
-                        onValueChange = { emailOrPhone = it },
-                        label = { Text(if (isPhoneOtpMode) "Nepal Phone (+977 98xxxxxxxx)" else "Email or Username") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "Signed in as:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = currentFirebaseUser?.email ?: currentFirebaseUser?.displayName ?: "Google User (${currentFirebaseUser?.uid?.take(8) ?: "Connected"})",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Firebase Cloud Firestore • asia-southeast1",
+                                fontSize = 10.sp,
+                                color = ConnectNpBlue,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text(if (isPhoneOtpMode) "SMS OTP Code" else "Password") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
-                        onClick = onLoginSuccess,
+                        onClick = {
+                            com.example.ui.screens.signOutUser(
+                                context = context,
+                                credentialManager = credentialManager,
+                                onSignOutComplete = onDismiss,
+                                scope = scope
+                            )
+                        },
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
+                        colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
-                            .testTag("login_submit_button")
+                            .testTag("account_sign_out_button")
                     ) {
                         Text(
-                            text = if (isPhoneOtpMode) "VERIFY & SIGN IN" else "SIGN IN TO CONNECTNP",
+                            text = "SIGN OUT OF GOOGLE",
                             fontFamily = PoppinsFontFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 13.sp,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.sp,
+                            color = Color.White
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    TextButton(onClick = { isPhoneOtpMode = !isPhoneOtpMode }) {
-                        Text(
-                            text = if (isPhoneOtpMode) "Use Email / Password instead" else "Sign in with Phone OTP (+977)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ConnectNpBlue
-                        )
-                    }
-
-                    Divider(modifier = Modifier.padding(vertical = 12.dp))
-
-                    // Social login buttons
-                    OutlinedButton(
-                        onClick = onLoginSuccess,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
-                    ) {
-                        Text("Continue with Google", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     OutlinedButton(
-                        onClick = onLoginSuccess,
+                        onClick = onDismiss,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
                     ) {
-                        Text("Biometric Fingerprint Login", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Close", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "By signing in, you agree to CONNECTNP Terms & Privacy Policy.",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
                 }
             }
         }

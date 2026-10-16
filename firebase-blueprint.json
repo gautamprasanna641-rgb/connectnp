@@ -1,0 +1,218 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile in ConnectNP",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of user"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of user"
+        },
+        "handle": {
+          "type": "string",
+          "description": "Unique username / handle"
+        },
+        "bio": {
+          "type": "string",
+          "description": "Bio description"
+        },
+        "walletBalance": {
+          "type": "integer",
+          "description": "ConnectNP Pay balance in NPR"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp via FieldValue.serverTimestamp()"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp via FieldValue.serverTimestamp()"
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "handle",
+        "createdAt"
+      ]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "User created post in ConnectNP",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Document ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Author UID"
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Author display name"
+        },
+        "authorHandle": {
+          "type": "string",
+          "description": "Author handle"
+        },
+        "content": {
+          "type": "string",
+          "description": "Text body of post"
+        },
+        "location": {
+          "type": "string",
+          "description": "Tagged location in Nepal"
+        },
+        "likesCount": {
+          "type": "integer",
+          "description": "Number of reactions"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Update timestamp"
+        }
+      },
+      "required": [
+        "userId",
+        "authorName",
+        "authorHandle",
+        "content",
+        "createdAt"
+      ]
+    },
+    "MarketItem": {
+      "title": "MarketItem",
+      "description": "Marketplace listing in ConnectNP",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Document ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Seller UID"
+        },
+        "sellerName": {
+          "type": "string",
+          "description": "Seller name"
+        },
+        "title": {
+          "type": "string",
+          "description": "Product title"
+        },
+        "priceNpr": {
+          "type": "integer",
+          "description": "Price in Nepalese Rupees"
+        },
+        "category": {
+          "type": "string",
+          "description": "Item category"
+        },
+        "location": {
+          "type": "string",
+          "description": "Item location"
+        },
+        "description": {
+          "type": "string",
+          "description": "Item description"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Listing creation timestamp"
+        }
+      },
+      "required": [
+        "userId",
+        "sellerName",
+        "title",
+        "priceNpr",
+        "category",
+        "location",
+        "createdAt"
+      ]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Wallet ledger transaction",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Transaction ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner UID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Transaction remarks or title"
+        },
+        "amount": {
+          "type": "integer",
+          "description": "Transaction amount in NPR"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["credit", "debit"],
+          "description": "Transaction type"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Transaction timestamp"
+        }
+      },
+      "required": [
+        "userId",
+        "title",
+        "amount",
+        "type",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "User profiles"
+    },
+    "/posts/{postId}": {
+      "schema": {
+        "$ref": "#/entities/Post"
+      },
+      "description": "Social posts feed"
+    },
+    "/market_items/{itemId}": {
+      "schema": {
+        "$ref": "#/entities/MarketItem"
+      },
+      "description": "Marketplace listings"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/entities/WalletTransaction"
+      },
+      "description": "User wallet transaction ledger"
+    }
+  }
+}

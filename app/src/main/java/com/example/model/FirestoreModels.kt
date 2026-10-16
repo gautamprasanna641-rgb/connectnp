@@ -1,0 +1,53 @@
+package com.example.model
+
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.ServerTimestamp
+
+@IgnoreExtraProperties
+data class FirestoreUserProfile(
+    val id: String = "",
+    val userId: String = "",
+    val name: String = "",
+    val handle: String = "",
+    val bio: String = "",
+    val walletBalance: Long = 0L,
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class FirestorePost(
+    val id: String = "",
+    val userId: String = "",
+    val authorName: String = "",
+    val authorHandle: String = "",
+    val content: String = "",
+    val location: String = "",
+    val likesCount: Long = 0L,
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class FirestoreMarketItem(
+    val id: String = "",
+    val userId: String = "",
+    val sellerName: String = "",
+    val title: String = "",
+    val priceNpr: Long = 0L,
+    val category: String = "",
+    val location: String = "",
+    val description: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class FirestoreWalletTransaction(
+    val id: String = "",
+    val userId: String = "",
+    val title: String = "",
+    val amount: Long = 0L,
+    val type: String = "credit",
+    @ServerTimestamp val createdAt: Timestamp? = null
+)

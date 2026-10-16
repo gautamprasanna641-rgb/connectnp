@@ -1,0 +1,54 @@
+name: Build Google Play AAB & APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Create Dummy google-services.json if missing
+      run: |
+        if [ ! -f "app/google-services.json" ]; then
+          echo '{"project_info":{"project_number":"0","project_id":"connectnp","storage_bucket":"connectnp.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0","android_client_info":{"package_name":"com.aistudio.connectnp.vkmz"}},"api_key":[{"current_key":"dummy"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
+        fi
+
+    - name: Generate Debug Keystore
+      run: |
+        keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keypass android -storepass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+    - name: Grant Execute Permission to Gradle
+      run: chmod +x gradlew || true
+
+    - name: Build Android App Bundle (.aab) & APK (.apk)
+      run: |
+        if [ -f "./gradlew" ]; then
+          ./gradlew bundleDebug assembleDebug --stacktrace
+        else
+          gradle bundleDebug assembleDebug --stacktrace
+        fi
+
+    - name: Upload Android App Bundle (AAB) Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: CONNECTNP-AppBundle-AAB
+        path: app/build/outputs/bundle/debug/*.aab
+
+    - name: Upload Universal APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: CONNECTNP-APK
+        path: app/build/outputs/apk/debug/*.apk
