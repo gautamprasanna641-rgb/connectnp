@@ -1,0 +1,6 @@
+{
+  "name": "CONNECTNP",
+  "description": "CONNECTNP is a complete social media super-app connecting Nepal and the world with feeds, reels, messaging, marketplace, video watch, dating, jobs, wallet, and creator tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

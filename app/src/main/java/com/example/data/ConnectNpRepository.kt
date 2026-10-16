@@ -1,0 +1,355 @@
+package com.example.data
+
+import com.example.R
+import com.example.model.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.UUID
+
+object ConnectNpRepository {
+
+    private val _posts = MutableStateFlow(SampleDataProvider.getInitialPosts())
+    val posts: StateFlow<List<Post>> = _posts.asStateFlow()
+
+    private val _stories = MutableStateFlow(SampleDataProvider.getInitialStories())
+    val stories: StateFlow<List<Story>> = _stories.asStateFlow()
+
+    private val _reels = MutableStateFlow(SampleDataProvider.getInitialReels())
+    val reels: StateFlow<List<Reel>> = _reels.asStateFlow()
+
+    private val _chatThreads = MutableStateFlow(SampleDataProvider.getInitialChatThreads())
+    val chatThreads: StateFlow<List<ChatThread>> = _chatThreads.asStateFlow()
+
+    private val _messagesByThread = MutableStateFlow<Map<String, List<ChatMessage>>>(
+        mapOf(
+            "chat_ai" to listOf(
+                ChatMessage(
+                    id = "m_ai_1",
+                    senderId = "user_ai",
+                    text = "नमस्ते! Welcome to ConnectNP. I'm your bilingual AI assistant. You can ask me to help write posts, translate English <-> Nepali, recommend travel itineraries in Nepal, or explain our features!",
+                    timestamp = "10:00 AM",
+                    isFromMe = false
+                )
+            ),
+            "chat_aayush" to listOf(
+                ChatMessage(
+                    id = "m_1",
+                    senderId = "user_aayush",
+                    text = "Dai, have you checked out the singing bowl listed on ConnectNP Marketplace?",
+                    timestamp = "12:30 PM",
+                    isFromMe = false
+                ),
+                ChatMessage(
+                    id = "m_2",
+                    senderId = "user_me",
+                    text = "Yes! The Patan artisan set looks fantastic. I will place the order through ConnectNP Pay Escrow right away.",
+                    timestamp = "12:35 PM",
+                    isFromMe = true,
+                    status = MessageStatus.READ
+                ),
+                ChatMessage(
+                    id = "m_3",
+                    senderId = "user_aayush",
+                    text = "Voice message from workshop",
+                    timestamp = "12:40 PM",
+                    isFromMe = false,
+                    mediaType = MessageMediaType.AUDIO_VOICE,
+                    audioDurationSec = 14
+                ),
+                ChatMessage(
+                    id = "m_4",
+                    senderId = "user_aayush",
+                    text = "Sent you the escrow payment receipt of रु 4,500 on ConnectNP Pay! 👍",
+                    timestamp = "12:45 PM",
+                    isFromMe = false
+                )
+            )
+        )
+    )
+    val messagesByThread: StateFlow<Map<String, List<ChatMessage>>> = _messagesByThread.asStateFlow()
+
+    private val _marketItems = MutableStateFlow(SampleDataProvider.getInitialMarketItems())
+    val marketItems: StateFlow<List<MarketItem>> = _marketItems.asStateFlow()
+
+    private val _watchVideos = MutableStateFlow(SampleDataProvider.getInitialWatchVideos())
+    val watchVideos: StateFlow<List<WatchVideo>> = _watchVideos.asStateFlow()
+
+    private val _jobs = MutableStateFlow(SampleDataProvider.getInitialJobs())
+    val jobs: StateFlow<List<JobItem>> = _jobs.asStateFlow()
+
+    private val _datingProfiles = MutableStateFlow(SampleDataProvider.getInitialDatingProfiles())
+    val datingProfiles: StateFlow<List<DatingProfile>> = _datingProfiles.asStateFlow()
+
+    private val _datingMatches = MutableStateFlow(1)
+    val datingMatches: StateFlow<Int> = _datingMatches.asStateFlow()
+
+    private val _walletBalance = MutableStateFlow(14850.50)
+    val walletBalance: StateFlow<Double> = _walletBalance.asStateFlow()
+
+    private val _transactions = MutableStateFlow(SampleDataProvider.getInitialWalletTransactions())
+    val transactions: StateFlow<List<WalletTransaction>> = _transactions.asStateFlow()
+
+    private val _isNepaliLanguage = MutableStateFlow(false)
+    val isNepaliLanguage: StateFlow<Boolean> = _isNepaliLanguage.asStateFlow()
+
+    private val _isDarkMode = MutableStateFlow(false)
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    private val _unreadNotifications = MutableStateFlow(4)
+    val unreadNotifications: StateFlow<Int> = _unreadNotifications.asStateFlow()
+
+    fun toggleLanguage() {
+        _isNepaliLanguage.value = !_isNepaliLanguage.value
+    }
+
+    fun toggleDarkMode() {
+        _isDarkMode.value = !_isDarkMode.value
+    }
+
+    fun clearNotifications() {
+        _unreadNotifications.value = 0
+    }
+
+    // --- Posts Logic ---
+    fun addPost(content: String, location: String? = null, mediaResId: Int? = null) {
+        val newPost = Post(
+            id = "post_${System.currentTimeMillis()}",
+            author = SampleDataProvider.currentUser,
+            content = content,
+            locationName = location ?: "Kathmandu, Nepal",
+            mediaResId = mediaResId,
+            timestamp = "Just now",
+            likesCount = 1,
+            commentsCount = 0,
+            sharesCount = 0,
+            userReaction = ReactionType.LOVE
+        )
+        _posts.value = listOf(newPost) + _posts.value
+    }
+
+    fun toggleReaction(postId: String, reaction: ReactionType) {
+        _posts.value = _posts.value.map { post ->
+            if (post.id == postId) {
+                val current = post.userReaction
+                if (current == reaction) {
+                    post.copy(
+                        userReaction = null,
+                        likesCount = maxOf(0, post.likesCount - 1)
+                    )
+                } else {
+                    val delta = if (current == null) 1 else 0
+                    post.copy(
+                        userReaction = reaction,
+                        likesCount = post.likesCount + delta
+                    )
+                }
+            } else post
+        }
+    }
+
+    fun votePoll(postId: String, optionId: Int) {
+        _posts.value = _posts.value.map { post ->
+            if (post.id == postId && post.poll != null && post.poll.userVotedOptionId == null) {
+                val updatedOptions = post.poll.options.map { opt ->
+                    if (opt.id == optionId) opt.copy(votes = opt.votes + 1) else opt
+                }
+                val updatedPoll = post.poll.copy(
+                    options = updatedOptions,
+                    totalVotes = post.poll.totalVotes + 1,
+                    userVotedOptionId = optionId
+                )
+                post.copy(poll = updatedPoll)
+            } else post
+        }
+    }
+
+    fun toggleBookmark(postId: String) {
+        _posts.value = _posts.value.map { post ->
+            if (post.id == postId) post.copy(isBookmarked = !post.isBookmarked) else post
+        }
+    }
+
+    fun addComment(postId: String, text: String) {
+        _posts.value = _posts.value.map { post ->
+            if (post.id == postId) {
+                post.copy(commentsCount = post.commentsCount + 1)
+            } else post
+        }
+    }
+
+    // --- Stories Logic ---
+    fun markStoryViewed(storyId: String) {
+        _stories.value = _stories.value.map { story ->
+            if (story.id == storyId) story.copy(isViewed = true) else story
+        }
+    }
+
+    fun addStory(caption: String) {
+        val newStory = Story(
+            id = "story_${System.currentTimeMillis()}",
+            author = SampleDataProvider.currentUser,
+            caption = caption,
+            mediaResId = R.drawable.himalaya_banner_1792096400169,
+            timestamp = "Just now",
+            isViewed = false
+        )
+        _stories.value = listOf(_stories.value.first()) + listOf(newStory) + _stories.value.drop(1)
+    }
+
+    // --- Reels Logic ---
+    fun toggleReelLike(reelId: String) {
+        _reels.value = _reels.value.map { reel ->
+            if (reel.id == reelId) {
+                val newLiked = !reel.isLiked
+                reel.copy(
+                    isLiked = newLiked,
+                    likesCount = if (newLiked) reel.likesCount + 1 else reel.likesCount - 1
+                )
+            } else reel
+        }
+    }
+
+    fun toggleReelSave(reelId: String) {
+        _reels.value = _reels.value.map { reel ->
+            if (reel.id == reelId) reel.copy(isSaved = !reel.isSaved) else reel
+        }
+    }
+
+    // --- Chat Logic ---
+    fun sendMessage(threadId: String, text: String, mediaType: MessageMediaType = MessageMediaType.TEXT, audioDurationSec: Int? = null) {
+        val userMsg = ChatMessage(
+            id = "msg_${System.currentTimeMillis()}",
+            senderId = SampleDataProvider.currentUser.id,
+            text = text,
+            timestamp = "Just now",
+            isFromMe = true,
+            status = MessageStatus.SENT,
+            mediaType = mediaType,
+            audioDurationSec = audioDurationSec
+        )
+
+        val currentList = _messagesByThread.value[threadId] ?: emptyList()
+        val updatedMap = _messagesByThread.value.toMutableMap()
+        updatedMap[threadId] = currentList + userMsg
+        _messagesByThread.value = updatedMap
+
+        // Update chat thread preview
+        _chatThreads.value = _chatThreads.value.map { thread ->
+            if (thread.id == threadId) {
+                thread.copy(
+                    lastMessage = if (mediaType == MessageMediaType.AUDIO_VOICE) "🎤 Voice Message (${audioDurationSec ?: 5}s)" else text,
+                    lastMessageTime = "Just now"
+                )
+            } else thread
+        }
+
+        // ConnectNP AI response generator
+        if (threadId == "chat_ai") {
+            generateAiResponse(text)
+        }
+    }
+
+    private fun generateAiResponse(userPrompt: String) {
+        val lower = userPrompt.lowercase()
+        val reply = when {
+            lower.contains("momo") || lower.contains("food") ->
+                "🥟 Kathmandu Momo Guide: For the crispiest C-Momo, head to Thamel or Patan! For traditional Buff Jhol Momo with spicy sesame achar, local stalls near New Road & Bagbazar are legendary!"
+            lower.contains("trek") || lower.contains("himalaya") || lower.contains("everest") ->
+                "🏔️ Best trekking seasons in Nepal are Autumn (Oct-Nov) and Spring (March-May). Annapurna Circuit, Langtang, and Everest Base Camp offer clear skies and stunning mountain vistas!"
+            lower.contains("pay") || lower.contains("wallet") || lower.contains("esewa") || lower.contains("khalti") ->
+                "💳 ConnectNP Pay supports instant zero-fee P2P transfers, QR merchant scans, and seamless integration with eSewa & Khalti wallets for marketplace escrow protection!"
+            lower.contains("nepali") || lower.contains("नमस्ते") ->
+                "नमस्ते! ConnectNP ले नेपाल र संसारभरका नेपालीहरूलाई एकै ठाउँमा जोड्ने काम गर्छ। तपाईं यहाँ साथीहरूसँग कुराकानी गर्न, रिल्स हेर्न, र सामान किनबेच गर्न सक्नुहुन्छ।"
+            else ->
+                "Namaste! ConnectNP AI here. I can assist you with sharing posts, exploring Marketplace listings, sending funds with ConnectNP Pay, or discovering trending Reels across Nepal! 🇳🇵✨"
+        }
+
+        val aiMsg = ChatMessage(
+            id = "ai_${System.currentTimeMillis()}",
+            senderId = SampleDataProvider.aiBotUser.id,
+            text = reply,
+            timestamp = "Just now",
+            isFromMe = false
+        )
+
+        val currentList = _messagesByThread.value["chat_ai"] ?: emptyList()
+        val updatedMap = _messagesByThread.value.toMutableMap()
+        updatedMap["chat_ai"] = currentList + aiMsg
+        _messagesByThread.value = updatedMap
+
+        _chatThreads.value = _chatThreads.value.map { thread ->
+            if (thread.id == "chat_ai") {
+                thread.copy(lastMessage = reply.take(60) + "...", lastMessageTime = "Just now")
+            } else thread
+        }
+    }
+
+    // --- Marketplace Logic ---
+    fun addMarketListing(title: String, price: Long, category: String, location: String, description: String) {
+        val newItem = MarketItem(
+            id = "item_${System.currentTimeMillis()}",
+            title = title,
+            priceNpr = price,
+            category = category,
+            location = location,
+            seller = SampleDataProvider.currentUser,
+            condition = "Brand New",
+            imageResId = R.drawable.nepal_crafts_1792096421296,
+            description = description,
+            isFeatured = true
+        )
+        _marketItems.value = listOf(newItem) + _marketItems.value
+    }
+
+    // --- ConnectNP Pay Logic ---
+    fun sendMoney(recipientName: String, amount: Double, remarks: String): Boolean {
+        if (_walletBalance.value < amount) return false
+        _walletBalance.value -= amount
+        val newTx = WalletTransaction(
+            id = "tx_${System.currentTimeMillis()}",
+            title = "P2P Transfer to $recipientName",
+            date = "Today, Just now",
+            amountNpr = amount,
+            isCredit = false,
+            category = remarks.ifEmpty { "P2P Payment" }
+        )
+        _transactions.value = listOf(newTx) + _transactions.value
+        return true
+    }
+
+    fun topUpWallet(amount: Double, source: String) {
+        _walletBalance.value += amount
+        val newTx = WalletTransaction(
+            id = "tx_${System.currentTimeMillis()}",
+            title = "Top-Up via $source",
+            date = "Today, Just now",
+            amountNpr = amount,
+            isCredit = true,
+            category = "Wallet Top-Up"
+        )
+        _transactions.value = listOf(newTx) + _transactions.value
+    }
+
+    // --- Jobs Logic ---
+    fun applyForJob(jobId: String) {
+        _jobs.value = _jobs.value.map { job ->
+            if (job.id == jobId) job.copy(hasApplied = true) else job
+        }
+    }
+
+    // --- Dating Logic ---
+    fun swipeDatingProfile(profileId: String, isLiked: Boolean) {
+        if (isLiked) {
+            _datingMatches.value += 1
+        }
+        _datingProfiles.value = _datingProfiles.value.filter { it.id != profileId }
+    }
+
+    // --- Watch Logic ---
+    fun toggleSubscribe(videoId: String) {
+        _watchVideos.value = _watchVideos.value.map { video ->
+            if (video.id == videoId) video.copy(isSubscribed = !video.isSubscribed) else video
+        }
+    }
+}
