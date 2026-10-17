@@ -19,13 +19,15 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        packages: 'platforms;android-35 build-tools;35.0.0'
+
     - name: Setup Gradle 9.3.1
       uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: '9.3.1'
-
-    - name: Accept Android SDK Licenses
-      run: yes | sdkmanager --licenses || true
 
     - name: Create Dummy google-services.json if missing
       run: |
@@ -33,9 +35,11 @@ jobs:
           echo '{"project_info":{"project_number":"0","project_id":"connectnp","storage_bucket":"connectnp.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0","android_client_info":{"package_name":"com.aistudio.connectnp.vkmz"}},"api_key":[{"current_key":"dummy"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
         fi
 
-    - name: Generate Debug Keystore
+    - name: Ensure Debug Keystore
       run: |
-        keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keypass android -storepass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        if [ ! -f "debug.keystore" ]; then
+          keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keypass android -storepass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        fi
 
     - name: Grant Execute Permission to Gradle
       run: chmod +x gradlew || true
@@ -43,9 +47,9 @@ jobs:
     - name: Build Android App Bundle (.aab) & APK (.apk)
       run: |
         if [ -f "./gradlew" ]; then
-          ./gradlew bundleDebug assembleDebug --stacktrace
+          ./gradlew bundleDebug assembleDebug --stacktrace --no-configuration-cache
         else
-          gradle bundleDebug assembleDebug --stacktrace
+          gradle bundleDebug assembleDebug --stacktrace --no-configuration-cache
         fi
 
     - name: Upload Android App Bundle (AAB) Artifact
