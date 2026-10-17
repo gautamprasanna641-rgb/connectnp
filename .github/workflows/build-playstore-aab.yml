@@ -32,7 +32,7 @@ jobs:
     - name: Create Dummy google-services.json if missing
       run: |
         if [ ! -f "app/google-services.json" ]; then
-          echo '{"project_info":{"project_number":"0","project_id":"connectnp","storage_bucket":"connectnp.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0","android_client_info":{"package_name":"com.aistudio.connectnp.vkmz"}},"api_key":[{"current_key":"dummy"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
+          echo '{"project_info":{"project_number":"436086085017","project_id":"connectnp","storage_bucket":"connectnp.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:436086085017:android:9c10a318f159032220ef08","android_client_info":{"package_name":"com.aistudio.connectnp.vkmz"}},"oauth_client":[{"client_id":"436086085017-fgh9ggacht7ufruigud2akj99i8til8o.apps.googleusercontent.com","client_type":3}],"api_key":[{"current_key":"dummy"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
         fi
 
     - name: Ensure Debug Keystore
