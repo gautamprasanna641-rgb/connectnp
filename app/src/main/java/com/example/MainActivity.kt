@@ -125,25 +125,38 @@ fun ConnectNpMainApp(
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
         ConnectNpMessagingService.createNotificationChannels(context)
+
+        // Attempt FCM registration gracefully only if Google Play Services is available
         try {
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    val token = task.result
-                    ConnectNpRepository.setFcmToken(token)
-                    val uid = Firebase.auth.currentUser?.uid
-                    if (uid != null) {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                ConnectNpFirestoreRepository(context).updateFcmToken(token)
-                            } catch (e: Exception) {
-                                // Handled
+            val availability = com.google.android.gms.common.GoogleApiAvailability.getInstance()
+            val resultCode = availability.isGooglePlayServicesAvailable(context)
+            if (resultCode == com.google.android.gms.common.ConnectionResult.SUCCESS) {
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val token = task.result
+                        if (!token.isNullOrBlank()) {
+                            Log.d("MainActivity", "FCM token retrieved successfully")
+                            ConnectNpRepository.setFcmToken(token)
+                            val uid = Firebase.auth.currentUser?.uid
+                            if (uid != null) {
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    try {
+                                        ConnectNpFirestoreRepository(context).updateFcmToken(token)
+                                    } catch (e: Exception) {
+                                        Log.d("MainActivity", "Failed updating FCM token to Firestore: ${e.message}")
+                                    }
+                                }
                             }
                         }
+                    } else {
+                        Log.i("MainActivity", "FCM registration not active in current environment: ${task.exception?.message}")
                     }
                 }
+            } else {
+                Log.i("MainActivity", "Google Play Services not available for FCM (code: $resultCode). Local notifications active.")
             }
         } catch (e: Exception) {
-            Log.e("MainActivity", "Error retrieving FCM token: ${e.message}")
+            Log.i("MainActivity", "FCM token check skipped: ${e.message}")
         }
     }
 

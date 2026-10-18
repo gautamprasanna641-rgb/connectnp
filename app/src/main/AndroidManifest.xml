@@ -27,6 +27,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Disable automatic FCM token generation on startup to avoid hard failure exceptions when Play Services/FCM servers are unreachable -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+
         <service
             android:name=".service.ConnectNpMessagingService"
             android:exported="false">
