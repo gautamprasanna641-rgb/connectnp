@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/connectnp_icon_1792096215635"
+        android:drawable="@drawable/connectnp_icon_foreground"
         android:gravity="center" />
 </layer-list>

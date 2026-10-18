@@ -59,18 +59,13 @@ fun ConnectNpSplashScreen(
             Box(
                 modifier = Modifier
                     .size(96.dp)
-                    .clip(RoundedCornerShape(26.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(ConnectNpBlue, NepalCrimson)
-                        )
-                    ),
+                    .clip(RoundedCornerShape(24.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.connectnp_icon_1792096215635),
+                    painter = painterResource(id = R.drawable.connectnp_icon_full),
                     contentDescription = "CONNECTNP Emblem",
-                    modifier = Modifier.size(80.dp)
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 
@@ -176,16 +171,13 @@ fun ConnectNpLoginDialog(
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        Brush.linearGradient(listOf(ConnectNpBlue, NepalCrimson))
-                                    ),
+                                    .clip(RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Image(
-                                    painter = painterResource(id = R.drawable.connectnp_icon_1792096215635),
+                                    painter = painterResource(id = R.drawable.connectnp_icon_full),
                                     contentDescription = null,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))

@@ -9,7 +9,7 @@ object SampleDataProvider {
         id = "user_me",
         name = "Prasanna Gautam",
         handle = "@prasanna_np",
-        avatarResId = R.drawable.connectnp_icon_1792096215635,
+        avatarResId = R.drawable.connectnp_icon_full,
         isVerified = true,
         isCreator = true,
         bio = "Software Engineer & Builder 🇳🇵 | Exploring the Himalayas & building ConnectNP",
@@ -43,7 +43,7 @@ object SampleDataProvider {
         id = "user_connectnp",
         name = "ConnectNP Official",
         handle = "@connectnp",
-        avatarResId = R.drawable.connectnp_icon_1792096215635,
+        avatarResId = R.drawable.connectnp_icon_full,
         isVerified = true,
         isCreator = true,
         location = "Global / Kathmandu",
@@ -55,7 +55,7 @@ object SampleDataProvider {
         id = "user_ai",
         name = "ConnectNP AI Assistant",
         handle = "@connectnp_ai",
-        avatarResId = R.drawable.connectnp_icon_1792096215635,
+        avatarResId = R.drawable.connectnp_icon_full,
         isVerified = true,
         isCreator = true,
         location = "ConnectNP Cloud",
@@ -82,7 +82,7 @@ object SampleDataProvider {
         Story(
             id = "story_2",
             author = officialUser,
-            mediaResId = R.drawable.connectnp_icon_1792096215635,
+            mediaResId = R.drawable.connectnp_icon_full,
             caption = "Welcome to ConnectNP Super App v2.0! Namaste world! 🇳🇵🙏",
             timestamp = "3h ago",
             isViewed = false
@@ -125,7 +125,7 @@ object SampleDataProvider {
             id = "post_2",
             author = officialUser,
             content = "🎉 Happy milestone, family! ConnectNP has officially crossed 500,000 active members uniting creators, entrepreneurs, and friends across Nepal and the global Nepali diaspora!\n\nFrom seamless P2P payments with ConnectNP Pay to TikTok-style vertical reels and hyper-local marketplace, we are shaping the future of social technology. Thank you for belonging! 🇳🇵✨",
-            mediaResId = R.drawable.connectnp_icon_1792096215635,
+            mediaResId = R.drawable.connectnp_icon_full,
             timestamp = "4 hours ago",
             likesCount = 1250,
             commentsCount = 189,
@@ -316,7 +316,7 @@ object SampleDataProvider {
             duration = "24:50",
             likesCount = "28K",
             isSubscribed = true,
-            imageResId = R.drawable.connectnp_icon_1792096215635,
+            imageResId = R.drawable.connectnp_icon_full,
             description = "A deep dive into our vision, real-time messaging, P2P payments, reels engine, and community empowerment."
         )
     )

@@ -12,6 +12,8 @@ data class FirestoreUserProfile(
     val handle: String = "",
     val bio: String = "",
     val walletBalance: Long = 0L,
+    val blockedUsers: List<String> = emptyList(),
+    val fcmToken: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -49,5 +51,16 @@ data class FirestoreWalletTransaction(
     val title: String = "",
     val amount: Long = 0L,
     val type: String = "credit",
+    @ServerTimestamp val createdAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class FirestoreReport(
+    val id: String = "",
+    val reportedBy: String = "",
+    val targetType: String = "post",
+    val targetId: String = "",
+    val targetAuthorId: String = "",
+    val reason: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null
 )

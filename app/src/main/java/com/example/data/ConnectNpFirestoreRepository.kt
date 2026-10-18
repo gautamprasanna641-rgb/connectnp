@@ -250,4 +250,119 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
                 }
         )
     }
+
+    suspend fun deleteUserAccount(userId: String): Result<Unit> {
+        val uid = requireUserId()
+        if (uid != userId) {
+            return Result.failure(IllegalArgumentException("Cannot delete account for another user"))
+        }
+        val path = "users/$uid"
+        return try {
+            db.collection("users").document(uid).delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun blockUser(targetUserId: String): Result<Unit> {
+        val uid = requireUserId()
+        val path = "users/$uid"
+        return try {
+            db.collection("users").document(uid).update(
+                "blockedUsers", FieldValue.arrayUnion(targetUserId),
+                "updatedAt", FieldValue.serverTimestamp()
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun unblockUser(targetUserId: String): Result<Unit> {
+        val uid = requireUserId()
+        val path = "users/$uid"
+        return try {
+            db.collection("users").document(uid).update(
+                "blockedUsers", FieldValue.arrayRemove(targetUserId),
+                "updatedAt", FieldValue.serverTimestamp()
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun reportContent(
+        targetType: String,
+        targetId: String,
+        targetAuthorId: String,
+        reason: String
+    ): Result<String> {
+        val uid = requireUserId()
+        val path = "reports"
+        val docRef = db.collection(path).document()
+        return try {
+            val payload = hashMapOf<String, Any>(
+                "id" to docRef.id,
+                "reportedBy" to uid,
+                "targetType" to targetType,
+                "targetId" to targetId,
+                "targetAuthorId" to targetAuthorId,
+                "reason" to reason,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            docRef.set(payload).await()
+            Result.success(docRef.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateFcmToken(token: String): Result<Unit> {
+        val uid = requireUserId()
+        val path = "users/$uid"
+        return try {
+            db.collection("users").document(uid).update(
+                "fcmToken", token,
+                "updatedAt", FieldValue.serverTimestamp()
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateUserProfile(name: String, bio: String): Result<Unit> {
+        val uid = requireUserId()
+        val path = "users/$uid"
+        return try {
+            db.collection("users").document(uid).update(
+                "name", name,
+                "bio", bio,
+                "updatedAt", FieldValue.serverTimestamp()
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
 }

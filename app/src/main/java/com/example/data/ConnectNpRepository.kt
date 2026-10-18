@@ -1,13 +1,33 @@
 package com.example.data
 
+import android.content.Context
 import com.example.R
 import com.example.model.*
+import com.example.service.ConnectNpMessagingService
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 object ConnectNpRepository {
+
+    private val _blockedUserIds = MutableStateFlow<Set<String>>(emptySet())
+    val blockedUserIds: StateFlow<Set<String>> = _blockedUserIds.asStateFlow()
+
+    private val _blockedUserNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val blockedUserNames: StateFlow<Map<String, String>> = _blockedUserNames.asStateFlow()
+
+    private val _reportedPostIds = MutableStateFlow<Set<String>>(emptySet())
+    val reportedPostIds: StateFlow<Set<String>> = _reportedPostIds.asStateFlow()
+
+    private val _fcmToken = MutableStateFlow<String?>(null)
+    val fcmToken: StateFlow<String?> = _fcmToken.asStateFlow()
 
     private val _posts = MutableStateFlow(SampleDataProvider.getInitialPosts())
     val posts: StateFlow<List<Post>> = _posts.asStateFlow()
@@ -350,6 +370,81 @@ object ConnectNpRepository {
     fun toggleSubscribe(videoId: String) {
         _watchVideos.value = _watchVideos.value.map { video ->
             if (video.id == videoId) video.copy(isSubscribed = !video.isSubscribed) else video
+        }
+    }
+
+    // --- Block & Report Logic (Play Store Compliance) ---
+    fun setFcmToken(token: String) {
+        _fcmToken.value = token
+    }
+
+    fun blockUser(userId: String, userName: String, context: Context? = null) {
+        _blockedUserIds.value = _blockedUserIds.value + userId
+        _blockedUserNames.value = _blockedUserNames.value + (userId to userName)
+        if (context != null) {
+            val firestoreRepo = ConnectNpFirestoreRepository(context)
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    firestoreRepo.blockUser(userId)
+                } catch (e: Exception) {
+                    // Fallback to local state if offline
+                }
+            }
+        }
+    }
+
+    fun unblockUser(userId: String, context: Context? = null) {
+        _blockedUserIds.value = _blockedUserIds.value - userId
+        _blockedUserNames.value = _blockedUserNames.value - userId
+        if (context != null) {
+            val firestoreRepo = ConnectNpFirestoreRepository(context)
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    firestoreRepo.unblockUser(userId)
+                } catch (e: Exception) {
+                    // Fallback to local state
+                }
+            }
+        }
+    }
+
+    fun reportPost(postId: String, authorId: String, reason: String, context: Context? = null) {
+        _reportedPostIds.value = _reportedPostIds.value + postId
+        if (context != null) {
+            val firestoreRepo = ConnectNpFirestoreRepository(context)
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    firestoreRepo.reportContent(
+                        targetType = "post",
+                        targetId = postId,
+                        targetAuthorId = authorId,
+                        reason = reason
+                    )
+                } catch (e: Exception) {
+                    // Handled gracefully
+                }
+            }
+        }
+    }
+
+    // --- Account Deletion (Mandatory for Play Store) ---
+    suspend fun deleteUserAccount(context: Context): Result<Unit> {
+        val user = Firebase.auth.currentUser
+            ?: return Result.failure(IllegalStateException("No authenticated user found"))
+        val uid = user.uid
+        return try {
+            val firestoreRepo = ConnectNpFirestoreRepository(context)
+            // 1. Delete user document from Firestore
+            firestoreRepo.deleteUserAccount(uid)
+            // 2. Delete Auth account
+            user.delete().await()
+            // 3. Clear local states
+            _blockedUserIds.value = emptySet()
+            _blockedUserNames.value = emptyMap()
+            _reportedPostIds.value = emptySet()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

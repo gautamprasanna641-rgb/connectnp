@@ -14,11 +14,13 @@ import com.example.ui.theme.NepalCrimson
 
 enum class NavigationTab(val labelEn: String, val labelNp: String) {
     FEED("Feed", "फिड"),
-    REELS("Reels", "रिल्स"),
     CHATS("Chats", "च्याट"),
     MARKETPLACE("Market", "बजार"),
+    PROFILE("Profile", "प्रोफाइल"),
+    SETTINGS("Settings", "सेटिङ"),
+    REELS("Reels", "रिल्स"),
     WATCH("Watch", "भिडियो"),
-    HUB("SuperApp", "सेवाहरू")
+    HUB("Services", "सेवाहरू")
 }
 
 @Composable
@@ -45,31 +47,11 @@ fun ConnectNpBottomBar(
             label = {
                 Text(
                     text = if (isNepali) NavigationTab.FEED.labelNp else NavigationTab.FEED.labelEn,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = if (currentTab == NavigationTab.FEED) FontWeight.Bold else FontWeight.Normal
                 )
             },
             modifier = Modifier.testTag("nav_tab_feed")
-        )
-
-        // Reels
-        NavigationBarItem(
-            selected = currentTab == NavigationTab.REELS,
-            onClick = { onTabSelected(NavigationTab.REELS) },
-            icon = {
-                Icon(
-                    imageVector = if (currentTab == NavigationTab.REELS) Icons.Filled.PlayArrow else Icons.Outlined.PlayArrow,
-                    contentDescription = "Reels"
-                )
-            },
-            label = {
-                Text(
-                    text = if (isNepali) NavigationTab.REELS.labelNp else NavigationTab.REELS.labelEn,
-                    fontSize = 11.sp,
-                    fontWeight = if (currentTab == NavigationTab.REELS) FontWeight.Bold else FontWeight.Normal
-                )
-            },
-            modifier = Modifier.testTag("nav_tab_reels")
         )
 
         // Chats
@@ -97,7 +79,7 @@ fun ConnectNpBottomBar(
             label = {
                 Text(
                     text = if (isNepali) NavigationTab.CHATS.labelNp else NavigationTab.CHATS.labelEn,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = if (currentTab == NavigationTab.CHATS) FontWeight.Bold else FontWeight.Normal
                 )
             },
@@ -117,51 +99,51 @@ fun ConnectNpBottomBar(
             label = {
                 Text(
                     text = if (isNepali) NavigationTab.MARKETPLACE.labelNp else NavigationTab.MARKETPLACE.labelEn,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = if (currentTab == NavigationTab.MARKETPLACE) FontWeight.Bold else FontWeight.Normal
                 )
             },
             modifier = Modifier.testTag("nav_tab_market")
         )
 
-        // Watch
+        // Profile
         NavigationBarItem(
-            selected = currentTab == NavigationTab.WATCH,
-            onClick = { onTabSelected(NavigationTab.WATCH) },
+            selected = currentTab == NavigationTab.PROFILE,
+            onClick = { onTabSelected(NavigationTab.PROFILE) },
             icon = {
                 Icon(
-                    imageVector = if (currentTab == NavigationTab.WATCH) Icons.Filled.Subscriptions else Icons.Outlined.Subscriptions,
-                    contentDescription = "Watch"
+                    imageVector = if (currentTab == NavigationTab.PROFILE) Icons.Filled.Person else Icons.Outlined.Person,
+                    contentDescription = "Profile"
                 )
             },
             label = {
                 Text(
-                    text = if (isNepali) NavigationTab.WATCH.labelNp else NavigationTab.WATCH.labelEn,
-                    fontSize = 11.sp,
-                    fontWeight = if (currentTab == NavigationTab.WATCH) FontWeight.Bold else FontWeight.Normal
+                    text = if (isNepali) NavigationTab.PROFILE.labelNp else NavigationTab.PROFILE.labelEn,
+                    fontSize = 10.sp,
+                    fontWeight = if (currentTab == NavigationTab.PROFILE) FontWeight.Bold else FontWeight.Normal
                 )
             },
-            modifier = Modifier.testTag("nav_tab_watch")
+            modifier = Modifier.testTag("nav_tab_profile")
         )
 
-        // SuperApp Hub
+        // Settings
         NavigationBarItem(
-            selected = currentTab == NavigationTab.HUB,
-            onClick = { onTabSelected(NavigationTab.HUB) },
+            selected = currentTab == NavigationTab.SETTINGS,
+            onClick = { onTabSelected(NavigationTab.SETTINGS) },
             icon = {
                 Icon(
-                    imageVector = if (currentTab == NavigationTab.HUB) Icons.Filled.Widgets else Icons.Outlined.Widgets,
-                    contentDescription = "Hub"
+                    imageVector = if (currentTab == NavigationTab.SETTINGS) Icons.Filled.Settings else Icons.Outlined.Settings,
+                    contentDescription = "Settings"
                 )
             },
             label = {
                 Text(
-                    text = if (isNepali) NavigationTab.HUB.labelNp else NavigationTab.HUB.labelEn,
-                    fontSize = 11.sp,
-                    fontWeight = if (currentTab == NavigationTab.HUB) FontWeight.Bold else FontWeight.Normal
+                    text = if (isNepali) NavigationTab.SETTINGS.labelNp else NavigationTab.SETTINGS.labelEn,
+                    fontSize = 10.sp,
+                    fontWeight = if (currentTab == NavigationTab.SETTINGS) FontWeight.Bold else FontWeight.Normal
                 )
             },
-            modifier = Modifier.testTag("nav_tab_hub")
+            modifier = Modifier.testTag("nav_tab_settings")
         )
     }
 }

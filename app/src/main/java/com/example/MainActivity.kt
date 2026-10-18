@@ -31,11 +31,21 @@ import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.ConnectNpTheme
 import com.example.ui.theme.NepalCrimson
 
+import android.os.Build
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.credentials.CredentialManager
+import com.example.data.ConnectNpFirestoreRepository
+import com.example.service.ConnectNpMessagingService
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,13 +79,19 @@ fun AppContent() {
             onAuthSuccess = { currentUser = Firebase.auth.currentUser }
         )
     } else {
-        ConnectNpMainApp(currentUserId = currentUser?.uid ?: "")
+        ConnectNpMainApp(
+            currentUserId = currentUser?.uid ?: "",
+            onSignOutUser = { currentUser = null }
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConnectNpMainApp(currentUserId: String = "") {
+fun ConnectNpMainApp(
+    currentUserId: String = "",
+    onSignOutUser: () -> Unit = {}
+) {
     val posts by ConnectNpRepository.posts.collectAsStateWithLifecycle()
     val stories by ConnectNpRepository.stories.collectAsStateWithLifecycle()
     val reels by ConnectNpRepository.reels.collectAsStateWithLifecycle()
@@ -94,6 +110,51 @@ fun ConnectNpMainApp(currentUserId: String = "") {
 
     var currentTab by remember { mutableStateOf(NavigationTab.FEED) }
     var showPayScreen by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
+    // Request Notification permission on Android 13+ (TASK 3)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        Log.d("MainActivity", "Notification permission granted: $isGranted")
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        ConnectNpMessagingService.createNotificationChannels(context)
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result
+                    ConnectNpRepository.setFcmToken(token)
+                    val uid = Firebase.auth.currentUser?.uid
+                    if (uid != null) {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                ConnectNpFirestoreRepository(context).updateFcmToken(token)
+                            } catch (e: Exception) {
+                                // Handled
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error retrieving FCM token: ${e.message}")
+        }
+    }
+
+    // Android back navigation: Return to Feed if on another tab or closing pay screen
+    androidx.activity.compose.BackHandler(enabled = currentTab != NavigationTab.FEED || showPayScreen) {
+        if (showPayScreen) {
+            showPayScreen = false
+        } else {
+            currentTab = NavigationTab.FEED
+        }
+    }
 
     // Modals / Dialogs
     var activeStoryIndex by remember { mutableStateOf<Int?>(null) }
@@ -213,6 +274,24 @@ fun ConnectNpMainApp(currentUserId: String = "") {
                                 ConnectNpRepository.sendMoney("Seller: ${item.seller.name}", item.priceNpr.toDouble(), "Escrow for ${item.title}")
                                 showPayScreen = true
                             }
+                        )
+                    }
+                    NavigationTab.PROFILE -> {
+                        ProfileScreen(
+                            isNepali = isNepali,
+                            onNavigateToSettings = { currentTab = NavigationTab.SETTINGS },
+                            onOpenWallet = { showPayScreen = true },
+                            onOpenQr = { showQrDialog = true }
+                        )
+                    }
+                    NavigationTab.SETTINGS -> {
+                        SettingsScreen(
+                            isNepali = isNepali,
+                            isDarkMode = isDark,
+                            onToggleLanguage = { ConnectNpRepository.toggleLanguage() },
+                            onToggleDarkMode = { ConnectNpRepository.toggleDarkMode() },
+                            onAccountDeleted = { onSignOutUser() },
+                            onSignOut = { onSignOutUser() }
                         )
                     }
                     NavigationTab.WATCH -> {

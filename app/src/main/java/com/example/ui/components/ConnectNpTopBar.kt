@@ -68,18 +68,13 @@ fun ConnectNpTopBar(
                     Box(
                         modifier = Modifier
                             .size(34.dp)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(ConnectNpBlue, NepalCrimson)
-                                )
-                            ),
+                            .clip(RoundedCornerShape(9.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
-                            painter = painterResource(id = R.drawable.connectnp_icon_1792096215635),
+                            painter = painterResource(id = R.drawable.connectnp_icon_full),
                             contentDescription = "CONNECTNP Logo",
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
 

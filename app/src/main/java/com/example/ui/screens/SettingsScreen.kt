@@ -1,0 +1,484 @@
+package com.example.ui.screens
+
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import com.example.data.ConnectNpRepository
+import com.example.ui.theme.ConnectNpBlue
+import com.example.ui.theme.NepalCrimson
+import com.example.ui.theme.PoppinsFontFamily
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import kotlinx.coroutines.launch
+
+@Composable
+fun SettingsScreen(
+    isNepali: Boolean,
+    isDarkMode: Boolean,
+    onToggleLanguage: () -> Unit,
+    onToggleDarkMode: () -> Unit,
+    onAccountDeleted: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
+    val currentUser = Firebase.auth.currentUser
+
+    val blockedUserIds by ConnectNpRepository.blockedUserIds.collectAsState()
+    val blockedUserNames by ConnectNpRepository.blockedUserNames.collectAsState()
+
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var isDeleting by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+
+    // Notification toggles
+    var notifyChats by remember { mutableStateOf(true) }
+    var notifyLikes by remember { mutableStateOf(true) }
+    var notifyCommunity by remember { mutableStateOf(true) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 14.dp)
+            .testTag("settings_screen"),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
+    ) {
+        // Screen Header
+        item {
+            Text(
+                text = if (isNepali) "सेटिङ र गोपनीयता" else "Settings & Privacy",
+                fontFamily = PoppinsFontFamily,
+                fontWeight = FontWeight.Black,
+                fontSize = 22.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = if (isNepali) "तपाईंको खाता, सुरक्षा र प्राथमिकताहरू प्रबन्ध गर्नुहोस्" else "Manage your account, preferences, and Google Play compliance",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Account Information Card
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "खाता जानकारी" else "Account Information")
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(text = "Signed in with Google", fontSize = 11.sp, color = ConnectNpBlue, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = currentUser?.displayName ?: "ConnectNP User",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = currentUser?.email ?: "No email provided",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "User ID: ${currentUser?.uid?.take(16) ?: "Offline"}...",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // App Preferences (Language & Dark Mode)
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "एप प्राथमिकताहरू" else "App Preferences")
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                    // Language
+                    SettingsToggleRow(
+                        icon = Icons.Default.Language,
+                        title = if (isNepali) "भाषा (Language)" else "Language / भाषा",
+                        subtitle = if (isNepali) "नेपाली (Nepali)" else "English",
+                        checked = isNepali,
+                        onCheckedChange = { onToggleLanguage() }
+                    )
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    // Dark Mode
+                    SettingsToggleRow(
+                        icon = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                        title = if (isNepali) "डार्क मोड (Dark Theme)" else "Dark Theme",
+                        subtitle = if (isDarkMode) "Enabled" else "Disabled",
+                        checked = isDarkMode,
+                        onCheckedChange = { onToggleDarkMode() }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Push Notifications (FCM)
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "पुश सूचनाहरू (Push Notifications)" else "Push Notifications (FCM)")
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                    SettingsToggleRow(
+                        icon = Icons.Outlined.Chat,
+                        title = if (isNepali) "च्याट सूचनाहरू" else "Chat & Messages",
+                        subtitle = "Instant alert for new personal & group messages",
+                        checked = notifyChats,
+                        onCheckedChange = { notifyChats = it }
+                    )
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    SettingsToggleRow(
+                        icon = Icons.Outlined.FavoriteBorder,
+                        title = if (isNepali) "लाइक र प्रतिक्रिया" else "Likes & Reactions",
+                        subtitle = "Notifications when someone reacts to your posts",
+                        checked = notifyLikes,
+                        onCheckedChange = { notifyLikes = it }
+                    )
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    SettingsToggleRow(
+                        icon = Icons.Outlined.Campaign,
+                        title = if (isNepali) "समुदाय अपडेटहरू" else "Community Updates",
+                        subtitle = "Himalayan trends and marketplace alerts",
+                        checked = notifyCommunity,
+                        onCheckedChange = { notifyCommunity = it }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Blocked Users (Play Store Compliance)
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "अवरुद्ध प्रयोगकर्ताहरू (Blocked Users)" else "Blocked Users (UGC Safety)")
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    if (blockedUserIds.isEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = ConnectNpBlue, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = if (isNepali) "कुनै अवरुद्ध प्रयोगकर्ता छैन" else "No blocked users. Your feed is clean.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        blockedUserIds.forEach { userId ->
+                            val userName = blockedUserNames[userId] ?: "User ($userId)"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.Block, contentDescription = null, tint = NepalCrimson, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = userName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                OutlinedButton(
+                                    onClick = { ConnectNpRepository.unblockUser(userId, context) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text(if (isNepali) "अनब्लक" else "Unblock", fontSize = 11.sp)
+                                }
+                            }
+                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Legal & Google Play Compliance (Privacy Policy)
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "कानूनी र नीतिहरू" else "Legal & Compliance")
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                    SettingsClickableRow(
+                        icon = Icons.Outlined.Policy,
+                        title = "Privacy Policy & Terms of Service",
+                        subtitle = "Google Play Data Safety & Zero-Trust compliance",
+                        onClick = { showPrivacyDialog = true }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Account Actions (Sign Out & Delete Account)
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "खाता कार्यहरू" else "Account Actions")
+
+            // Sign Out Button
+            OutlinedButton(
+                onClick = {
+                    signOutUser(
+                        context = context,
+                        credentialManager = credentialManager,
+                        onSignOutComplete = onSignOut,
+                        scope = coroutineScope
+                    )
+                },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("settings_sign_out_button")
+            ) {
+                Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (isNepali) "साइन आउट गर्नुहोस्" else "Sign Out", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Delete Account Button (TASK 1: Mandatory for Google Play Store)
+            Button(
+                onClick = { showDeleteConfirmDialog = true },
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("delete_account_button")
+            ) {
+                Icon(Icons.Default.DeleteForever, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isNepali) "खाता स्थायी रूपमा मेटाउनुहोस् (Delete Account)" else "Delete Account Permanently",
+                    fontFamily = PoppinsFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = Color.White
+                )
+            }
+        }
+    }
+
+    // Confirmation Dialog for Account Deletion (TASK 1)
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isDeleting) showDeleteConfirmDialog = false },
+            icon = {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = NepalCrimson, modifier = Modifier.size(36.dp))
+            },
+            title = {
+                Text(
+                    text = if (isNepali) "के तपाईं पक्का खाता मेटाउन चाहनुहुन्छ?" else "Delete Account Permanently?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = if (isNepali)
+                            "यो कार्य पूर्ववत गर्न सकिँदैन। तपाईंको CONNECTNP प्रोफाइल, पोष्टहरू, सन्देशहरू, र वालेट ब्यालेन्स स्थायी रूपमा क्लाउडबाट मेटिनेछ।"
+                        else
+                            "This action cannot be undone. All your CONNECTNP posts, profile data, wallet records, and credentials will be permanently erased from Firebase and cannot be recovered.",
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    if (isDeleting) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Deleting account data...", fontSize = 12.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isDeleting = true
+                        coroutineScope.launch {
+                            val result = ConnectNpRepository.deleteUserAccount(context)
+                            isDeleting = false
+                            showDeleteConfirmDialog = false
+                            if (result.isSuccess) {
+                                Toast.makeText(context, "Account successfully deleted", Toast.LENGTH_LONG).show()
+                                signOutUser(
+                                    context = context,
+                                    credentialManager = credentialManager,
+                                    onSignOutComplete = onAccountDeleted,
+                                    scope = coroutineScope
+                                )
+                            } else {
+                                val err = result.exceptionOrNull()?.localizedMessage ?: "Failed to delete account"
+                                Toast.makeText(context, "Error: $err", Toast.LENGTH_LONG).show()
+                                // Sign out anyway if auth state is invalidated
+                                signOutUser(
+                                    context = context,
+                                    credentialManager = credentialManager,
+                                    onSignOutComplete = onAccountDeleted,
+                                    scope = coroutineScope
+                                )
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson),
+                    enabled = !isDeleting,
+                    modifier = Modifier.testTag("confirm_delete_account_button")
+                ) {
+                    Text(if (isDeleting) "Deleting..." else "Yes, Delete Account", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showDeleteConfirmDialog = false },
+                    enabled = !isDeleting
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Privacy Policy & Compliance Dialog
+    if (showPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyDialog = false },
+            title = { Text("Privacy Policy & Terms", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "CONNECTNP respects your privacy and complies with Google Play Developer Program Policies:\n\n" +
+                                "1. Account & Data Deletion: Users can delete their account and associated data anytime.\n" +
+                                "2. UGC Safety: Zero tolerance for objectionable content. Users can report posts and block offending users immediately.\n" +
+                                "3. Secure Authentication: Gated behind zero-trust Google Sign-In with Credential Manager.\n" +
+                                "4. Data Encryption: Encrypted at rest and in transit via Firebase Cloud Firestore in asia-southeast1.\n\n" +
+                                "Contact: support@connectnp.app",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showPrivacyDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SettingsCategoryHeader(title: String) {
+    Text(
+        text = title,
+        fontFamily = PoppinsFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp,
+        color = ConnectNpBlue,
+        modifier = Modifier.padding(bottom = 6.dp)
+    )
+}
+
+@Composable
+fun SettingsToggleRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Icon(imageVector = icon, contentDescription = null, tint = ConnectNpBlue, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(text = title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(text = subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+fun SettingsClickableRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Icon(imageVector = icon, contentDescription = null, tint = ConnectNpBlue, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(text = title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(text = subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

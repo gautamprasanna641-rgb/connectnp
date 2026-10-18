@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -22,17 +23,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.R
+import com.example.data.ConnectNpRepository
 import com.example.data.SampleDataProvider
 import com.example.model.*
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.ConnectNpSuccess
 import com.example.ui.theme.NepalCrimson
+import com.example.util.NetworkConnectivityObserver
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +56,19 @@ fun FeedScreen(
     onNavigateToMarketplace: () -> Unit,
     onNavigateToReels: () -> Unit
 ) {
+    val context = LocalContext.current
+    val blockedUserIds by ConnectNpRepository.blockedUserIds.collectAsState()
+    val reportedPostIds by ConnectNpRepository.reportedPostIds.collectAsState()
+
+    // Observe network connectivity (TASK 5)
+    val connectivityObserver = remember { NetworkConnectivityObserver(context) }
+    val isOnline by connectivityObserver.isOnline.collectAsState(initial = true)
+
+    // Filter out blocked users & reported content (TASK 2)
+    val filteredPosts = remember(posts, blockedUserIds, reportedPostIds) {
+        posts.filter { it.author.id !in blockedUserIds && it.id !in reportedPostIds }
+    }
+
     var selectedFeedTab by remember { mutableIntStateOf(0) } // 0: For You, 1: Following, 2: Local Nepal
     var activeCommentPostId by remember { mutableStateOf<String?>(null) }
     var activeReactionPickerPostId by remember { mutableStateOf<String?>(null) }
@@ -67,6 +86,32 @@ fun FeedScreen(
             .testTag("feed_screen"),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
+        // Offline Banner (TASK 5)
+        if (!isOnline) {
+            item {
+                Surface(
+                    color = Color(0xFF263238),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CloudOff, contentDescription = null, tint = Color(0xFFFFB74D), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isNepali) "अफलाइन मोड — सुरक्षित क्यास सामग्री देखाइँदैछ" else "Offline Mode — Showing cached Himalayan posts",
+                            fontSize = 11.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
         // Feed Category Tabs
         item {
             ScrollableTabRow(
@@ -109,8 +154,8 @@ fun FeedScreen(
             )
         }
 
-        // Posts List
-        items(posts, key = { it.id }) { post ->
+        // Filtered Posts List (Hiding blocked users and reported posts)
+        items(filteredPosts, key = { it.id }) { post ->
             PostCardItem(
                 post = post,
                 isNepali = isNepali,
@@ -124,7 +169,15 @@ fun FeedScreen(
                 },
                 onVotePoll = { optionId -> onVotePoll(post.id, optionId) },
                 onToggleBookmark = { onToggleBookmark(post.id) },
-                onOpenComments = { activeCommentPostId = post.id }
+                onOpenComments = { activeCommentPostId = post.id },
+                onBlockAuthor = { authorId, authorName ->
+                    ConnectNpRepository.blockUser(authorId, authorName, context)
+                    Toast.makeText(context, "Blocked $authorName", Toast.LENGTH_SHORT).show()
+                },
+                onReportPost = { postId, authorId, reason ->
+                    ConnectNpRepository.reportPost(postId, authorId, reason, context)
+                    Toast.makeText(context, "Report submitted. Thank you for keeping CONNECTNP safe.", Toast.LENGTH_SHORT).show()
+                }
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -422,8 +475,14 @@ fun PostCardItem(
     onSelectReaction: (ReactionType) -> Unit,
     onVotePoll: (Int) -> Unit,
     onToggleBookmark: () -> Unit,
-    onOpenComments: () -> Unit
+    onOpenComments: () -> Unit,
+    onBlockAuthor: (String, String) -> Unit = { _, _ -> },
+    onReportPost: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
+    var showBlockDialog by remember { mutableStateOf(false) }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(0.dp),
@@ -496,12 +555,60 @@ fun PostCardItem(
                     }
                 }
 
+                // Bookmark Icon
                 IconButton(onClick = onToggleBookmark) {
                     Icon(
                         imageVector = if (post.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                         contentDescription = "Bookmark",
                         tint = if (post.isBookmarked) ConnectNpBlue else MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                // Three-dot Menu (TASK 2: Play Store UGC Compliance)
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.testTag("post_menu_button_${post.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (isNepali) "पोस्ट रिपोर्ट गर्नुहोस्" else "Report Post") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                            },
+                            onClick = {
+                                showMenu = false
+                                showReportDialog = true
+                            },
+                            modifier = Modifier.testTag("report_post_menu_item")
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (isNepali) "ब्लक गर्नुहोस् (${post.author.name})" else "Block ${post.author.name}",
+                                    color = NepalCrimson
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.Block, contentDescription = null, tint = NepalCrimson)
+                            },
+                            onClick = {
+                                showMenu = false
+                                showBlockDialog = true
+                            },
+                            modifier = Modifier.testTag("block_user_menu_item")
+                        )
+                    }
                 }
             }
 
@@ -514,11 +621,44 @@ fun PostCardItem(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            // Post Media / Image
+            // Post Media / Image with Coil & Asynchronous Loading Placeholder (TASK 5)
             if (post.mediaResId != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Image(
-                    painter = painterResource(id = post.mediaResId),
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(post.mediaResId)
+                        .crossfade(true)
+                        .build(),
+                    loading = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(230.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                color = ConnectNpBlue,
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    },
+                    error = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(230.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.BrokenImage,
+                                contentDescription = "Error loading image",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
                     contentDescription = "Post media",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -688,6 +828,97 @@ fun PostCardItem(
                 }
             }
         }
+    }
+
+    // Report Dialog (Play Store UGC Safety Compliance)
+    if (showReportDialog) {
+        var selectedReason by remember { mutableStateOf("Inappropriate Content") }
+        val reasons = listOf(
+            "Spam or misleading scam",
+            "Inappropriate content or nudity",
+            "Harassment or hate speech",
+            "Misinformation or false news",
+            "Violence or physical threat"
+        )
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            icon = { Icon(Icons.Default.Flag, contentDescription = null, tint = NepalCrimson) },
+            title = { Text(if (isNepali) "पोस्ट रिपोर्ट गर्नुहोस्" else "Report Post", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (isNepali) "कृपया रिपोर्ट गर्नुको कारण छान्नुहोस्:" else "Why are you reporting this post?",
+                        fontSize = 13.sp
+                    )
+                    reasons.forEach { reason ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedReason = reason }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = selectedReason == reason,
+                                onClick = { selectedReason = reason }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(reason, fontSize = 12.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onReportPost(post.id, post.author.id, selectedReason)
+                        showReportDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson)
+                ) {
+                    Text(if (isNepali) "रिपोर्ट पेस गर्नुहोस्" else "Submit Report")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showReportDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Block User Dialog (Play Store UGC Safety Compliance)
+    if (showBlockDialog) {
+        AlertDialog(
+            onDismissRequest = { showBlockDialog = false },
+            icon = { Icon(Icons.Default.Block, contentDescription = null, tint = NepalCrimson) },
+            title = { Text(if (isNepali) "प्रयोगकर्ता ब्लक गर्नुहोस्?" else "Block ${post.author.name}?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = if (isNepali)
+                        "के तपाईं @${post.author.handle} लाई ब्लक गर्न निश्चित हुनुहुन्छ? तपाईंले उहाँका पोस्ट, कमेन्ट वा सन्देशहरू देख्नुहुने छैन।"
+                    else
+                        "Are you sure you want to block @${post.author.handle}? You will no longer see their posts, stories, or messages.",
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onBlockAuthor(post.author.id, post.author.name)
+                        showBlockDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson)
+                ) {
+                    Text(if (isNepali) "हो, ब्लक गर्नुहोस्" else "Block User")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showBlockDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

@@ -28,6 +28,8 @@ service cloud.firestore {
              data.handle is string && data.handle.size() >= 1 && data.handle.size() <= 50 &&
              (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
              (!('walletBalance' in data) || (data.walletBalance is int && data.walletBalance >= 0)) &&
+             (!('blockedUsers' in data) || (data.blockedUsers is list)) &&
+             (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 500)) &&
              (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
              (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
     }
@@ -73,7 +75,7 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'name', 'handle', 'createdAt']) &&
-                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'walletBalance', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'walletBalance', 'blockedUsers', 'fcmToken', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        isValidUserProfile(incoming());
@@ -83,7 +85,7 @@ service cloud.firestore {
                        incoming().userId == existing().userId &&
                        incoming().createdAt == existing().createdAt &&
                        isValidUserProfile(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'walletBalance', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'walletBalance', 'blockedUsers', 'fcmToken', 'updatedAt']);
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
 
       match /transactions/{transactionId} {
@@ -143,6 +145,16 @@ service cloud.firestore {
                        isValidMarketItem(incoming()) &&
                        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'priceNpr', 'category', 'location', 'description']);
       allow delete: if isSignedIn() && isValidId(itemId) && existing().userId == request.auth.uid;
+    }
+
+    match /reports/{reportId} {
+      allow get, list: if false;
+      allow create: if isSignedIn() &&
+                       isValidId(reportId) &&
+                       incoming().reportedBy == request.auth.uid &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time;
+      allow update, delete: if false;
     }
   }
 }

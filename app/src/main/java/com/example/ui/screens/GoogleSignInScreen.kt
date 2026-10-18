@@ -2,10 +2,13 @@ package com.example.ui.screens
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,10 +31,15 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
 import com.example.R
 import com.example.ui.theme.ConnectNpBlue
-import com.example.ui.theme.NepalCrimson
 import com.example.ui.theme.PoppinsFontFamily
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -43,6 +51,47 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Exact Web Client ID configured in Google Cloud Console.
+ * Used for both requestIdToken (GoogleSignInOptions) and serverClientId (CredentialManager).
+ */
+const val WEB_CLIENT_ID = "147110426467-euo2aqf3lrs9upit1n49va75h3a48ij.apps.googleusercontent.com"
+
+fun getResolvedWebClientId(context: Context): String {
+    return try {
+        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        if (resId != 0) {
+            val resVal = context.getString(resId)
+            if (resVal.isNotBlank()) resVal else WEB_CLIENT_ID
+        } else {
+            WEB_CLIENT_ID
+        }
+    } catch (e: Exception) {
+        WEB_CLIENT_ID
+    }
+}
+
+/**
+ * Builds GoogleSignInOptions configured with requestIdToken using the exact Web Client ID.
+ */
+fun getGoogleSignInOptions(context: Context): GoogleSignInOptions {
+    val clientId = getResolvedWebClientId(context)
+    return GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+        .requestIdToken(clientId)
+        .requestEmail()
+        .build()
+}
+
+/**
+ * Creates GoogleSignInClient for launching the Google Sign-In intent.
+ */
+fun getGoogleSignInClient(context: Context): GoogleSignInClient {
+    return GoogleSignIn.getClient(context, getGoogleSignInOptions(context))
+}
+
+/**
+ * Silent / auto-sign-in attempt for already authenticated users.
+ */
 fun attemptAutoSignIn(
     context: Context,
     credentialManager: CredentialManager,
@@ -54,12 +103,8 @@ fun attemptAutoSignIn(
         onAuthSuccess()
         return
     }
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
-        onUnauthenticated()
-        return
-    }
+
+    val clientId = getResolvedWebClientId(context)
 
     val googleIdOption = GetGoogleIdOption.Builder()
         .setFilterByAuthorizedAccounts(true)
@@ -87,53 +132,84 @@ fun attemptAutoSignIn(
     }
 }
 
-fun onGoogleSignInClicked(
+/**
+ * Handles signing in: first attempts Credential Manager with serverClientId;
+ * if Credential Manager is unsupported or fails, falls back directly to the Google Sign-In Intent.
+ */
+fun performGoogleSignIn(
     context: Context,
     credentialManager: CredentialManager,
+    googleSignInLauncher: ActivityResultLauncher<Intent>,
     onAuthSuccess: () -> Unit,
     onAuthError: (String) -> Unit,
-    scope: CoroutineScope,
-    onAuthCancelled: () -> Unit = {}
+    onAuthCancelled: () -> Unit,
+    scope: CoroutineScope
 ) {
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
-        onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
-        return
-    }
-
+    val clientId = getResolvedWebClientId(context)
     val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
     val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
 
     scope.launch {
         try {
-            val result = credentialManager.getCredential(context as Activity, request)
-            val credential = result.credential
-            if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-                val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                Firebase.auth.signInWithCredential(authCredential).await()
-                onAuthSuccess()
-            } else {
-                onAuthError("Unexpected credential type")
+            val activity = context as? Activity
+            if (activity != null) {
+                val result = credentialManager.getCredential(activity, request)
+                val credential = result.credential
+                if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
+                    val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
+                    Firebase.auth.signInWithCredential(authCredential).await()
+                    onAuthSuccess()
+                    return@launch
+                }
             }
+            // If credential was not resolved via CredentialManager, fallback to Intent
+            val client = getGoogleSignInClient(context)
+            googleSignInLauncher.launch(client.signInIntent)
         } catch (e: GetCredentialCancellationException) {
-            Log.w("Auth", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
+            Log.w("Auth", "Credential Manager sign-in cancelled: ${e.message}")
             onAuthCancelled()
+        } catch (e: GetCredentialException) {
+            Log.i("Auth", "Credential Manager unavailable or failed (${e.message}); falling back to Google Sign-In Intent")
+            try {
+                val client = getGoogleSignInClient(context)
+                googleSignInLauncher.launch(client.signInIntent)
+            } catch (intentErr: Exception) {
+                Log.e("Auth", "Failed to launch Google Sign-In Intent", intentErr)
+                onAuthError("Failed to start Google Sign-In: ${intentErr.localizedMessage ?: intentErr.message}")
+            }
         } catch (e: Exception) {
-            Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "Sign in failed")
+            Log.i("Auth", "Credential Manager encountered exception, launching Google Sign-In Intent: ${e.message}")
+            try {
+                val client = getGoogleSignInClient(context)
+                googleSignInLauncher.launch(client.signInIntent)
+            } catch (intentErr: Exception) {
+                Log.e("Auth", "Failed to start Google Sign-In intent", intentErr)
+                onAuthError(intentErr.localizedMessage ?: "Sign in failed")
+            }
         }
     }
 }
 
+/**
+ * Complete sign out clearing Firebase, GoogleSignInClient, and CredentialManager state.
+ */
 fun signOutUser(
     context: Context,
     credentialManager: CredentialManager,
     onSignOutComplete: () -> Unit,
     scope: CoroutineScope
 ) {
-    Firebase.auth.signOut()
+    try {
+        Firebase.auth.signOut()
+    } catch (e: Exception) {
+        Log.e("Auth", "Error signing out of Firebase", e)
+    }
+    try {
+        getGoogleSignInClient(context).signOut()
+    } catch (e: Exception) {
+        Log.e("Auth", "Error signing out of GoogleSignInClient", e)
+    }
     scope.launch {
         try {
             credentialManager.clearCredentialState(ClearCredentialStateRequest())
@@ -154,6 +230,65 @@ fun GoogleSignInScreen(
     val credentialManager = remember { CredentialManager.create(context) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Register ActivityResultLauncher to handle the Google Sign-In intent properly
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val intent = result.data
+            if (intent != null) {
+                val task = GoogleSignIn.getSignedInAccountFromIntent(intent)
+                try {
+                    val account = task.getResult(ApiException::class.java)
+                    val idToken = account?.idToken
+                    if (!idToken.isNullOrEmpty()) {
+                        coroutineScope.launch {
+                            try {
+                                val authCredential = GoogleAuthProvider.getCredential(idToken, null)
+                                Firebase.auth.signInWithCredential(authCredential).await()
+                                isLoading = false
+                                onAuthSuccess()
+                            } catch (e: Exception) {
+                                Log.e("Auth", "Firebase auth failed with token", e)
+                                isLoading = false
+                                errorMessage = "Firebase Sign-In failed: ${e.localizedMessage ?: e.message}"
+                            }
+                        }
+                    } else {
+                        isLoading = false
+                        errorMessage = "Failed to retrieve Google ID token. Please verify Web Client ID."
+                    }
+                } catch (e: ApiException) {
+                    isLoading = false
+                    Log.e("Auth", "Google Sign-In Intent ApiException: ${e.statusCode}", e)
+                    val msg = when (e.statusCode) {
+                        12500 -> "Sign-in failed (Error 12500). Please verify SHA-1 fingerprint and Web Client ID."
+                        12501 -> null // User cancelled selection
+                        12502 -> "Sign-in already in progress."
+                        CommonStatusCodes.NETWORK_ERROR, 7 -> "Network error. Please check your internet connection."
+                        else -> "Google Sign-In error (code ${e.statusCode}): ${e.localizedMessage ?: e.message}"
+                    }
+                    if (msg != null) {
+                        errorMessage = msg
+                    }
+                } catch (e: Exception) {
+                    isLoading = false
+                    Log.e("Auth", "Unexpected error handling Google Sign-In intent", e)
+                    errorMessage = e.localizedMessage ?: "Unexpected error during Google Sign-In"
+                }
+            } else {
+                isLoading = false
+                errorMessage = "No data returned from Google Sign-In"
+            }
+        } else if (result.resultCode == Activity.RESULT_CANCELED) {
+            isLoading = false
+            Log.d("Auth", "Google Sign-In was cancelled by user")
+        } else {
+            isLoading = false
+            errorMessage = "Google Sign-In failed with result code: ${result.resultCode}"
+        }
+    }
 
     LaunchedEffect(Unit) {
         attemptAutoSignIn(
@@ -196,18 +331,13 @@ fun GoogleSignInScreen(
                 Box(
                     modifier = Modifier
                         .size(80.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(ConnectNpBlue, NepalCrimson)
-                            )
-                        ),
+                        .clip(RoundedCornerShape(20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.connectnp_icon_1792096215635),
+                        painter = painterResource(id = R.drawable.connectnp_icon_full),
                         contentDescription = "ConnectNP Logo",
-                        modifier = Modifier.size(64.dp)
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
 
@@ -264,9 +394,10 @@ fun GoogleSignInScreen(
                     onClick = {
                         isLoading = true
                         errorMessage = null
-                        onGoogleSignInClicked(
+                        performGoogleSignIn(
                             context = context,
                             credentialManager = credentialManager,
+                            googleSignInLauncher = googleSignInLauncher,
                             onAuthSuccess = {
                                 isLoading = false
                                 onAuthSuccess()
@@ -275,10 +406,10 @@ fun GoogleSignInScreen(
                                 isLoading = false
                                 errorMessage = err
                             },
-                            scope = coroutineScope,
                             onAuthCancelled = {
                                 isLoading = false
-                            }
+                            },
+                            scope = coroutineScope
                         )
                     },
                     enabled = !isLoading,
@@ -314,6 +445,7 @@ fun GoogleSignInScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Sign in with Google",
+                                fontFamily = PoppinsFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = Color.White
