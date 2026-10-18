@@ -30,7 +30,7 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
 
     private fun requireUserId(): String {
         return auth.currentUser?.uid
-            ?: throw IllegalStateException("User must be signed in with Google before accessing Firestore.")
+            ?: throw IllegalStateException("User must be signed in before accessing Firestore.")
     }
 
     suspend fun saveUserProfile(

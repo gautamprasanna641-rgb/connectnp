@@ -320,7 +320,7 @@ fun ProfileScreen(
                     ) {
                         TrustBadgeCard(
                             title = "Nepal Verified Identity 🇳🇵",
-                            subtitle = "Verified via Google Sign-In & Credential Manager",
+                            subtitle = "Verified via Firebase Authentication",
                             icon = Icons.Default.VerifiedUser,
                             color = ConnectNpBlue
                         )

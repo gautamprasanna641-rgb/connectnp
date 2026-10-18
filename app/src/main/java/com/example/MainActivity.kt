@@ -75,7 +75,7 @@ fun AppContent() {
     }
 
     if (currentUser == null) {
-        GoogleSignInScreen(
+        AuthScreen(
             onAuthSuccess = { currentUser = Firebase.auth.currentUser }
         )
     } else {

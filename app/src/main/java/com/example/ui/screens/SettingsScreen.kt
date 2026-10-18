@@ -90,7 +90,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(text = "Signed in with Google", fontSize = 11.sp, color = ConnectNpBlue, fontWeight = FontWeight.Bold)
+                    Text(text = "Signed in with Firebase", fontSize = 11.sp, color = ConnectNpBlue, fontWeight = FontWeight.Bold)
                     Text(
                         text = currentUser?.displayName ?: "ConnectNP User",
                         fontSize = 15.sp,
@@ -399,7 +399,7 @@ fun SettingsScreen(
                         text = "CONNECTNP respects your privacy and complies with Google Play Developer Program Policies:\n\n" +
                                 "1. Account & Data Deletion: Users can delete their account and associated data anytime.\n" +
                                 "2. UGC Safety: Zero tolerance for objectionable content. Users can report posts and block offending users immediately.\n" +
-                                "3. Secure Authentication: Gated behind zero-trust Google Sign-In with Credential Manager.\n" +
+                                "3. Secure Authentication: Firebase Authentication (Email/Password) with zero-trust Firestore security rules.\n" +
                                 "4. Data Encryption: Encrypted at rest and in transit via Firebase Cloud Firestore in asia-southeast1.\n\n" +
                                 "Contact: support@connectnp.app",
                         fontSize = 12.sp,

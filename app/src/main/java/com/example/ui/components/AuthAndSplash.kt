@@ -229,7 +229,7 @@ fun ConnectNpLoginDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = currentFirebaseUser?.email ?: currentFirebaseUser?.displayName ?: "Google User (${currentFirebaseUser?.uid?.take(8) ?: "Connected"})",
+                                text = currentFirebaseUser?.email ?: currentFirebaseUser?.displayName ?: "ConnectNP User (${currentFirebaseUser?.uid?.take(8) ?: "Connected"})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -263,7 +263,7 @@ fun ConnectNpLoginDialog(
                             .testTag("account_sign_out_button")
                     ) {
                         Text(
-                            text = "SIGN OUT OF GOOGLE",
+                            text = "SIGN OUT",
                             fontFamily = PoppinsFontFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 13.sp,
