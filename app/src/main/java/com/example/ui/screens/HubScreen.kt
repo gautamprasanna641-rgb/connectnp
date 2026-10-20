@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import com.example.data.ConnectNpRepository
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -129,6 +130,7 @@ fun HubOverview(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                val activeUser = ConnectNpRepository.getCurrentActiveUser()
                 Row(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -142,12 +144,21 @@ fun HubOverview(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = SampleDataProvider.currentUser.name.take(1),
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 24.sp
-                        )
+                        if (!activeUser.avatarUrl.isNullOrBlank()) {
+                            coil.compose.AsyncImage(
+                                model = activeUser.avatarUrl,
+                                contentDescription = activeUser.name,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Text(
+                                text = activeUser.name.take(1).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 24.sp
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(14.dp))
@@ -155,7 +166,7 @@ fun HubOverview(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = SampleDataProvider.currentUser.name,
+                                text = activeUser.name,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
@@ -168,7 +179,7 @@ fun HubOverview(
                             )
                         }
                         Text(
-                            text = "${SampleDataProvider.currentUser.handle} • ${SampleDataProvider.currentUser.followersCount} Followers",
+                            text = "${activeUser.handle} • ${activeUser.followersCount} Followers",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

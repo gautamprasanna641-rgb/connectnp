@@ -22,8 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.R
+import com.example.data.ConnectNpRepository
 import com.example.data.SampleDataProvider
+import com.example.model.User
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
 
@@ -31,6 +34,7 @@ import com.example.ui.theme.NepalCrimson
 @Composable
 fun CreatePostDialog(
     isNepali: Boolean,
+    currentUser: User? = null,
     onDismiss: () -> Unit,
     onSubmitPost: (content: String, location: String?, mediaResId: Int?) -> Unit
 ) {
@@ -83,6 +87,8 @@ fun CreatePostDialog(
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
 
                 // Author Info & Privacy
+                val activeUser = currentUser ?: remember { ConnectNpRepository.getCurrentActiveUser() }
+                val userFirstName = activeUser.name.split(" ").firstOrNull()?.ifBlank { "there" } ?: "there"
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -91,19 +97,28 @@ fun CreatePostDialog(
                             .background(ConnectNpBlue),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = SampleDataProvider.currentUser.name.take(1),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
+                        if (!activeUser.avatarUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = activeUser.avatarUrl,
+                                contentDescription = activeUser.name,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(
+                                text = activeUser.name.take(1).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Column {
                         Text(
-                            text = SampleDataProvider.currentUser.name,
+                            text = activeUser.name,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -144,8 +159,8 @@ fun CreatePostDialog(
                     onValueChange = { content = it },
                     placeholder = {
                         Text(
-                            if (isNepali) "तपाईंको दिमागमा के छ, प्रसन्न? केहि शेयर गर्नुहोस्..."
-                            else "What's on your mind, Prasanna? Connect with Nepal & the world..."
+                            if (isNepali) "तपाईंको दिमागमा के छ, $userFirstName? केहि शेयर गर्नुहोस्..."
+                            else "What's on your mind, $userFirstName? Connect with Nepal & the world..."
                         )
                     },
                     modifier = Modifier

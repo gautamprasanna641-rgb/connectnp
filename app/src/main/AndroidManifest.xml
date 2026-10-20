@@ -27,10 +27,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Disable automatic FCM token generation on startup to avoid hard failure exceptions when Play Services/FCM servers are unreachable -->
+        <!-- Enable Firebase Cloud Messaging for instant push notifications -->
         <meta-data
             android:name="firebase_messaging_auto_init_enabled"
-            android:value="false" />
+            android:value="true" />
 
         <service
             android:name=".service.ConnectNpMessagingService"

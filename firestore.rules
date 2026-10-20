@@ -27,6 +27,7 @@ service cloud.firestore {
              data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
              data.handle is string && data.handle.size() >= 1 && data.handle.size() <= 50 &&
              (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2000)) &&
              (!('walletBalance' in data) || (data.walletBalance is int && data.walletBalance >= 0)) &&
              (!('blockedUsers' in data) || (data.blockedUsers is list)) &&
              (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 500)) &&
@@ -42,6 +43,8 @@ service cloud.firestore {
              (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
              (!('location' in data) || (data.location is string && data.location.size() <= 100)) &&
              (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
+             (!('commentsCount' in data) || (data.commentsCount is int && data.commentsCount >= 0)) &&
+             (!('sharesCount' in data) || (data.sharesCount is int && data.sharesCount >= 0)) &&
              (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
              (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
     }
@@ -69,13 +72,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId);
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn();
       allow create: if isSignedIn() &&
                        isValidId(userId) &&
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'name', 'handle', 'createdAt']) &&
-                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'walletBalance', 'blockedUsers', 'fcmToken', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'photoUrl', 'walletBalance', 'blockedUsers', 'fcmToken', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        isValidUserProfile(incoming());
@@ -85,7 +88,7 @@ service cloud.firestore {
                        incoming().userId == existing().userId &&
                        incoming().createdAt == existing().createdAt &&
                        isValidUserProfile(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'walletBalance', 'blockedUsers', 'fcmToken', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'photoUrl', 'walletBalance', 'blockedUsers', 'fcmToken', 'updatedAt']);
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
 
       match /transactions/{transactionId} {
@@ -107,12 +110,12 @@ service cloud.firestore {
 
     match /posts/{postId} {
       allow get: if isSignedIn() && isValidId(postId);
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn();
       allow create: if isSignedIn() &&
                        isValidId(postId) &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'authorName', 'authorHandle', 'content', 'createdAt']) &&
-                       incoming().keys().hasOnly(['id', 'userId', 'authorName', 'authorHandle', 'content', 'location', 'likesCount', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['id', 'userId', 'authorName', 'authorHandle', 'content', 'location', 'likesCount', 'commentsCount', 'sharesCount', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        isValidPost(incoming());
@@ -122,8 +125,21 @@ service cloud.firestore {
                        incoming().userId == existing().userId &&
                        incoming().createdAt == existing().createdAt &&
                        isValidPost(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['content', 'location', 'likesCount', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['content', 'location', 'likesCount', 'commentsCount', 'sharesCount', 'updatedAt']);
       allow delete: if isSignedIn() && isValidId(postId) && existing().userId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow get, list: if isSignedIn() && isValidId(postId) && isValidId(commentId);
+        allow create: if isSignedIn() &&
+                         isValidId(postId) &&
+                         isValidId(commentId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'authorName', 'text', 'createdAt']) &&
+                         incoming().keys().hasOnly(['id', 'postId', 'userId', 'authorName', 'authorHandle', 'authorAvatarUrl', 'text', 'createdAt']) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time;
+        allow update, delete: if isSignedIn() && existing().userId == request.auth.uid;
+      }
     }
 
     match /market_items/{itemId} {

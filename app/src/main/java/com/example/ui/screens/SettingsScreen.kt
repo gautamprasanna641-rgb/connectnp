@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,15 +15,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
+import coil.compose.AsyncImage
+import com.example.data.ConnectNpFirestoreRepository
 import com.example.data.ConnectNpRepository
+import com.example.ui.components.EditProfileDialog
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
 import com.example.ui.theme.PoppinsFontFamily
@@ -46,6 +52,20 @@ fun SettingsScreen(
 
     val blockedUserIds by ConnectNpRepository.blockedUserIds.collectAsState()
     val blockedUserNames by ConnectNpRepository.blockedUserNames.collectAsState()
+
+    val firestoreRepo = remember { ConnectNpFirestoreRepository(context) }
+    val userProfileDoc by firestoreRepo.observeUserProfile().collectAsState(initial = null)
+
+    var currentDisplayName by remember(currentUser, userProfileDoc) {
+        mutableStateOf(userProfileDoc?.name ?: currentUser?.displayName ?: "ConnectNP User")
+    }
+    var currentBio by remember(userProfileDoc) {
+        mutableStateOf(userProfileDoc?.bio ?: "Proud ConnectNP Citizen 🇳🇵")
+    }
+    var currentPhotoUrl by remember(currentUser, userProfileDoc) {
+        mutableStateOf(userProfileDoc?.photoUrl?.ifBlank { null } ?: currentUser?.photoUrl?.toString())
+    }
+    var showEditProfileDialog by remember { mutableStateOf(false) }
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
@@ -81,7 +101,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Account Information Card
+        // Account Information Card (TASK 1: Profile Edit)
         item {
             SettingsCategoryHeader(title = if (isNepali) "खाता जानकारी" else "Account Information")
             Card(
@@ -90,23 +110,77 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(text = "Signed in with Firebase", fontSize = 11.sp, color = ConnectNpBlue, fontWeight = FontWeight.Bold)
-                    Text(
-                        text = currentUser?.displayName ?: "ConnectNP User",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = currentUser?.email ?: "No email provided",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "User ID: ${currentUser?.uid?.take(16) ?: "Offline"}...",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // User Avatar
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(ConnectNpBlue),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!currentPhotoUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = currentPhotoUrl,
+                                    contentDescription = currentDisplayName,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Text(
+                                    text = currentDisplayName.take(1).uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 22.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Signed in with Firebase", fontSize = 11.sp, color = ConnectNpBlue, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = currentDisplayName,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = currentUser?.email ?: "No email provided",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (currentBio.isNotBlank()) {
+                                Text(
+                                    text = currentBio,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Edit Profile Button (TASK 1)
+                    Button(
+                        onClick = { showEditProfileDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_edit_profile_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isNepali) "प्रोफाइल र फोटो सम्पादन गर्नुहोस्" else "Edit Profile & Photo", fontSize = 13.sp)
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -411,6 +485,22 @@ fun SettingsScreen(
                 Button(onClick = { showPrivacyDialog = false }) {
                     Text("Close")
                 }
+            }
+        )
+    }
+
+    // Edit Profile Dialog (TASK 1: Save to Firestore & Firebase Storage)
+    if (showEditProfileDialog) {
+        EditProfileDialog(
+            initialName = currentDisplayName,
+            initialBio = currentBio,
+            initialPhotoUrl = currentPhotoUrl,
+            isNepali = isNepali,
+            onDismiss = { showEditProfileDialog = false },
+            onProfileUpdated = { newName, newBio, newPhotoUrl ->
+                currentDisplayName = newName
+                currentBio = newBio
+                currentPhotoUrl = newPhotoUrl
             }
         )
     }

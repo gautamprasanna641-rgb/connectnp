@@ -87,6 +87,12 @@ class ConnectNpMessagingService : FirebaseMessagingService() {
         ) {
             createNotificationChannels(context)
 
+            try {
+                ConnectNpRepository.incrementUnreadNotifications()
+            } catch (e: Exception) {
+                // Ignore if repository is not yet ready
+            }
+
             // Verify permission on Android 13+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val permission = ContextCompat.checkSelfPermission(
@@ -94,7 +100,7 @@ class ConnectNpMessagingService : FirebaseMessagingService() {
                     android.Manifest.permission.POST_NOTIFICATIONS
                 )
                 if (permission != PackageManager.PERMISSION_GRANTED) {
-                    Log.w(TAG, "Notification permission not granted, skipping display")
+                    Log.w(TAG, "Notification permission not granted, skipping system banner")
                     return
                 }
             }
@@ -114,7 +120,7 @@ class ConnectNpMessagingService : FirebaseMessagingService() {
             )
 
             val builder = NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.connectnp_icon_full)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -122,6 +128,7 @@ class ConnectNpMessagingService : FirebaseMessagingService() {
                     if (type == "chat") NotificationCompat.PRIORITY_HIGH
                     else NotificationCompat.PRIORITY_DEFAULT
                 )
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
 

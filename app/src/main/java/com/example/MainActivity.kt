@@ -112,6 +112,19 @@ fun ConnectNpMainApp(
     var showPayScreen by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val firestoreRepo = remember(context) { ConnectNpFirestoreRepository(context) }
+    val userProfileDoc by firestoreRepo.observeUserProfile().collectAsStateWithLifecycle(initialValue = null)
+
+    val currentActiveUser by ConnectNpRepository.currentActiveUser.collectAsStateWithLifecycle()
+
+    LaunchedEffect(userProfileDoc, Firebase.auth.currentUser) {
+        ConnectNpRepository.updateActiveUser(userProfileDoc, Firebase.auth.currentUser)
+        userProfileDoc?.blockedUsers?.let { blockedList ->
+            if (blockedList.isNotEmpty()) {
+                ConnectNpRepository.setBlockedUserIds(blockedList)
+            }
+        }
+    }
 
     // Request Notification permission on Android 13+ (TASK 3)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -169,9 +182,12 @@ fun ConnectNpMainApp(
         }
     }
 
+    val coroutineScope = rememberCoroutineScope()
+
     // Modals / Dialogs
     var activeStoryIndex by remember { mutableStateOf<Int?>(null) }
     var showCreatePostDialog by remember { mutableStateOf(false) }
+    var showSearchDialog by remember { mutableStateOf(false) }
     var activeCallUserAndVideo by remember { mutableStateOf<Pair<User, Boolean>?>(null) }
     var showQrDialog by remember { mutableStateOf(false) }
     var showNotificationsSheet by remember { mutableStateOf(false) }
@@ -192,6 +208,7 @@ fun ConnectNpMainApp(
                 onOpenWallet = { showPayScreen = true },
                 onOpenQrScanner = { showQrDialog = true },
                 onOpenNotifications = { showNotificationsSheet = true },
+                onOpenSearch = { showSearchDialog = true },
                 onToggleLanguage = { ConnectNpRepository.toggleLanguage() },
                 onToggleDark = { ConnectNpRepository.toggleDarkMode() }
             )
@@ -233,6 +250,7 @@ fun ConnectNpMainApp(
                             posts = posts,
                             stories = stories,
                             isNepali = isNepali,
+                            currentUser = currentActiveUser,
                             onStoryClick = { index -> activeStoryIndex = index },
                             onAddStoryClick = {
                                 ConnectNpRepository.addStory("Loving ConnectNP Super-App vibes! 🇳🇵✨")
@@ -240,7 +258,7 @@ fun ConnectNpMainApp(
                             },
                             onCreatePostClick = { showCreatePostDialog = true },
                             onToggleReaction = { postId, reaction ->
-                                ConnectNpRepository.toggleReaction(postId, reaction)
+                                ConnectNpRepository.toggleReaction(postId, reaction, context)
                             },
                             onVotePoll = { postId, optId ->
                                 ConnectNpRepository.votePoll(postId, optId)
@@ -251,6 +269,10 @@ fun ConnectNpMainApp(
                             onAddComment = { postId, text ->
                                 ConnectNpRepository.addComment(postId, text)
                             },
+                            onSharePost = { postId ->
+                                ConnectNpRepository.incrementShareCount(postId)
+                            },
+                            onOpenSearch = { showSearchDialog = true },
                             onNavigateToMarketplace = { currentTab = NavigationTab.MARKETPLACE },
                             onNavigateToReels = { currentTab = NavigationTab.REELS }
                         )
@@ -259,7 +281,7 @@ fun ConnectNpMainApp(
                         ReelsScreen(
                             reels = reels,
                             isNepali = isNepali,
-                            onToggleLike = { ConnectNpRepository.toggleReelLike(it) },
+                            onToggleLike = { ConnectNpRepository.toggleReelLike(it, context) },
                             onToggleSave = { ConnectNpRepository.toggleReelSave(it) }
                         )
                     }
@@ -269,7 +291,7 @@ fun ConnectNpMainApp(
                             messagesByThread = messagesByThread,
                             isNepali = isNepali,
                             onSendMessage = { threadId, text, mediaType, duration ->
-                                ConnectNpRepository.sendMessage(threadId, text, mediaType, duration)
+                                ConnectNpRepository.sendMessage(threadId, text, mediaType, duration, context)
                             },
                             onStartCall = { user, isVideo ->
                                 activeCallUserAndVideo = Pair(user, isVideo)
@@ -348,10 +370,34 @@ fun ConnectNpMainApp(
     if (showCreatePostDialog) {
         CreatePostDialog(
             isNepali = isNepali,
+            currentUser = currentActiveUser,
             onDismiss = { showCreatePostDialog = false },
             onSubmitPost = { content, location, mediaResId ->
-                ConnectNpRepository.addPost(content, location, mediaResId)
+                val activeUser = ConnectNpRepository.getCurrentActiveUser()
+                ConnectNpRepository.addPost(content, location, mediaResId, activeUser)
+                coroutineScope.launch {
+                    try {
+                        val repo = ConnectNpFirestoreRepository(context)
+                        repo.createPost(
+                            content = content,
+                            location = location ?: "Kathmandu, Nepal",
+                            authorName = activeUser.name,
+                            authorHandle = activeUser.handle
+                        )
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "Firestore post error: ${e.message}")
+                    }
+                }
+                showCreatePostDialog = false
             }
+        )
+    }
+
+    // User Search Dialog (TASK 3)
+    if (showSearchDialog) {
+        UserSearchDialog(
+            isNepali = isNepali,
+            onDismiss = { showSearchDialog = false }
         )
     }
 

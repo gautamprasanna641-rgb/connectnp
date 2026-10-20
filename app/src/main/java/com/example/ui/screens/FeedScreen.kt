@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -29,9 +30,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.R
+import com.example.data.ConnectNpFirestoreRepository
 import com.example.data.ConnectNpRepository
 import com.example.data.SampleDataProvider
 import com.example.model.*
@@ -39,6 +42,7 @@ import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.ConnectNpSuccess
 import com.example.ui.theme.NepalCrimson
 import com.example.util.NetworkConnectivityObserver
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,10 +57,14 @@ fun FeedScreen(
     onVotePoll: (String, Int) -> Unit,
     onToggleBookmark: (String) -> Unit,
     onAddComment: (String, String) -> Unit,
+    onSharePost: (String) -> Unit = {},
+    onOpenSearch: () -> Unit = {},
     onNavigateToMarketplace: () -> Unit,
-    onNavigateToReels: () -> Unit
+    onNavigateToReels: () -> Unit,
+    currentUser: User? = null
 ) {
     val context = LocalContext.current
+    val activeUser = currentUser ?: remember { ConnectNpRepository.getCurrentActiveUser() }
     val blockedUserIds by ConnectNpRepository.blockedUserIds.collectAsState()
     val reportedPostIds by ConnectNpRepository.reportedPostIds.collectAsState()
 
@@ -64,9 +72,12 @@ fun FeedScreen(
     val connectivityObserver = remember { NetworkConnectivityObserver(context) }
     val isOnline by connectivityObserver.isOnline.collectAsState(initial = true)
 
-    // Filter out blocked users & reported content (TASK 2)
+    // Filter out blocked users & reported content
     val filteredPosts = remember(posts, blockedUserIds, reportedPostIds) {
-        posts.filter { it.author.id !in blockedUserIds && it.id !in reportedPostIds }
+        posts.filter { post ->
+            !ConnectNpRepository.isUserBlocked(post.author.id, post.author.handle, post.author.name) &&
+            post.id !in reportedPostIds
+        }
     }
 
     var selectedFeedTab by remember { mutableIntStateOf(0) } // 0: For You, 1: Following, 2: Local Nepal
@@ -138,8 +149,11 @@ fun FeedScreen(
 
         // Stories Bar
         item {
+            val visibleStories = remember(stories, blockedUserIds) {
+                stories.filter { !ConnectNpRepository.isUserBlocked(it.author.id, it.author.handle, it.author.name) }
+            }
             StoriesSection(
-                stories = stories,
+                stories = visibleStories,
                 isNepali = isNepali,
                 onStoryClick = onStoryClick,
                 onAddStoryClick = onAddStoryClick
@@ -149,9 +163,42 @@ fun FeedScreen(
         // Create Post Prompt Box
         item {
             CreatePostHeaderBox(
+                user = activeUser,
                 isNepali = isNepali,
                 onCreatePostClick = onCreatePostClick
             )
+        }
+
+        // Search Bar Card (TASK 3)
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .clickable { onOpenSearch() }
+                    .testTag("feed_search_card"),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = ConnectNpBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = if (isNepali) "प्रयोगकर्ता वा साथीहरू खोज्नुहोस्..." else "Search users, creators & Nepali community...",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
         // Filtered Posts List (Hiding blocked users and reported posts)
@@ -170,8 +217,9 @@ fun FeedScreen(
                 onVotePoll = { optionId -> onVotePoll(post.id, optionId) },
                 onToggleBookmark = { onToggleBookmark(post.id) },
                 onOpenComments = { activeCommentPostId = post.id },
-                onBlockAuthor = { authorId, authorName ->
-                    ConnectNpRepository.blockUser(authorId, authorName, context)
+                onSharePost = { onSharePost(post.id) },
+                onBlockAuthor = { authorId, authorName, authorHandle ->
+                    ConnectNpRepository.blockUser(authorId, authorName, context, authorHandle)
                     Toast.makeText(context, "Blocked $authorName", Toast.LENGTH_SHORT).show()
                 },
                 onReportPost = { postId, authorId, reason ->
@@ -360,9 +408,11 @@ fun StoriesSection(
 
 @Composable
 fun CreatePostHeaderBox(
+    user: User,
     isNepali: Boolean,
     onCreatePostClick: () -> Unit
 ) {
+    val userFirstName = user.name.split(" ").firstOrNull()?.ifBlank { "there" } ?: "there"
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(0.dp),
@@ -382,11 +432,23 @@ fun CreatePostHeaderBox(
                         .background(ConnectNpBlue),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = SampleDataProvider.currentUser.name.take(1),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (!user.avatarUrl.isNullOrBlank()) {
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(user.avatarUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = user.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(
+                            text = user.name.take(1).uppercase(),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(10.dp))
@@ -405,7 +467,7 @@ fun CreatePostHeaderBox(
                         modifier = Modifier.padding(horizontal = 14.dp)
                     ) {
                         Text(
-                            text = if (isNepali) "के सोच्दै हुनुहुन्छ, प्रसन्न?" else "What's on your mind, Prasanna?",
+                            text = if (isNepali) "के सोच्दै हुनुहुन्छ, $userFirstName?" else "What's on your mind, $userFirstName?",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 13.sp
                         )
@@ -476,7 +538,8 @@ fun PostCardItem(
     onVotePoll: (Int) -> Unit,
     onToggleBookmark: () -> Unit,
     onOpenComments: () -> Unit,
-    onBlockAuthor: (String, String) -> Unit = { _, _ -> },
+    onSharePost: () -> Unit = {},
+    onBlockAuthor: (String, String, String) -> Unit = { _, _, _ -> },
     onReportPost: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -505,12 +568,21 @@ fun PostCardItem(
                         .background(ConnectNpBlue),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = post.author.name.take(1),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+                    if (!post.author.avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = post.author.avatarUrl,
+                            contentDescription = post.author.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(
+                            text = post.author.name.take(1).uppercase(),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(10.dp))
@@ -816,8 +888,32 @@ fun PostCardItem(
                     Text(text = if (isNepali) "टिप्पणी" else "Comment")
                 }
 
-                // Share Button
-                TextButton(onClick = { /* Share */ }) {
+                // Share Button (TASK 4: Native Android Share Intent)
+                val cardContext = LocalContext.current
+                TextButton(
+                    onClick = {
+                        val shareContent = buildString {
+                            append("${post.author.name} on CONNECTNP 🇳🇵:\n\n")
+                            append(post.content)
+                            if (post.locationName != null) {
+                                append("\n📍 ${post.locationName}")
+                            }
+                            append("\n\nJoin CONNECTNP: https://connectnp.app/post/${post.id}")
+                        }
+                        val sendIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, shareContent)
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(
+                            sendIntent,
+                            if (isNepali) "पोस्ट शेयर गर्नुहोस्" else "Share Post via"
+                        )
+                        cardContext.startActivity(shareIntent)
+                        onSharePost()
+                    },
+                    modifier = Modifier.testTag("share_button_${post.id}")
+                ) {
                     Icon(
                         imageVector = Icons.Outlined.Share,
                         contentDescription = "Share",
@@ -905,7 +1001,7 @@ fun PostCardItem(
             confirmButton = {
                 Button(
                     onClick = {
-                        onBlockAuthor(post.author.id, post.author.name)
+                        onBlockAuthor(post.author.id, post.author.name, post.author.handle)
                         showBlockDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson)
@@ -930,59 +1026,157 @@ fun CommentBottomSheet(
     onDismiss: () -> Unit,
     onAddComment: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val firestoreRepo = remember { ConnectNpFirestoreRepository(context) }
     var newCommentText by remember { mutableStateOf("") }
-    val sampleComments = remember {
-        mutableStateListOf(
-            Comment("c1", SampleDataProvider.aayushUser, "Proud of this movement! Connecting Nepal with world-class tech 🇳🇵", "1h ago", 12, true),
-            Comment("c2", SampleDataProvider.poojaUser, "Amazing photography and initiative! Looking forward to the meetup.", "45m ago", 8, false)
-        )
+    var isSending by remember { mutableStateOf(false) }
+
+    val firestoreComments by firestoreRepo.observeComments(post.id).collectAsState(initial = emptyList())
+    val localRepoComments by ConnectNpRepository.commentsByPost.collectAsState()
+    val postLocalComments = localRepoComments[post.id] ?: emptyList()
+
+    val allComments = remember(firestoreComments, postLocalComments, post.id) {
+        val list = mutableListOf<Comment>()
+        if (post.id == "p1" && firestoreComments.isEmpty() && postLocalComments.isEmpty()) {
+            list.add(Comment("c1", SampleDataProvider.aayushUser, "Proud of this movement! Connecting Nepal with world-class tech 🇳🇵", "1h ago", 12, true))
+            list.add(Comment("c2", SampleDataProvider.poojaUser, "Amazing photography and initiative! Looking forward to the meetup.", "45m ago", 8, false))
+        }
+        firestoreComments.forEach { fc ->
+            list.add(
+                Comment(
+                    id = fc.id,
+                    author = User(
+                        id = fc.userId,
+                        name = fc.authorName.ifBlank { "ConnectNP User" },
+                        handle = if (fc.authorHandle.startsWith("@")) fc.authorHandle else "@${fc.authorHandle}",
+                        avatarUrl = fc.authorAvatarUrl.ifBlank { null }
+                    ),
+                    text = fc.text,
+                    timeAgo = "Just now"
+                )
+            )
+        }
+        postLocalComments.forEach { lc ->
+            if (list.none { it.id == lc.id || (it.text == lc.text && it.author.id == lc.author.id) }) {
+                list.add(lc)
+            }
+        }
+        list.filter { !ConnectNpRepository.isUserBlocked(it.author.id, it.author.handle, it.author.name) }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("comment_bottom_sheet")
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .navigationBarsPadding()
         ) {
-            Text(
-                text = if (isNepali) "टिप्पणीहरू (${sampleComments.size + post.commentsCount})" else "Comments (${sampleComments.size + post.commentsCount})",
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isNepali) "टिप्पणीहरू (${allComments.size})" else "Comments (${allComments.size})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Text(
+                    text = "Cloud Firestore ☁️",
+                    fontSize = 10.sp,
+                    color = ConnectNpBlue,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Existing Comments
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .heightIn(max = 280.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(sampleComments) { comment ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(ConnectNpBlue),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(comment.author.name.take(1), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .padding(10.dp)
-                        ) {
-                            Text(comment.author.name, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            Text(comment.text, fontSize = 13.sp)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(comment.timeAgo, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Comments List
+            if (allComments.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Outlined.ChatBubbleOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isNepali) "कुनै टिप्पणी छैन। पहिलो टिप्पणी गर्नुहोस्! 🇳🇵" else "No comments yet. Start the conversation! 🇳🇵",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(allComments, key = { it.id }) { comment ->
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(ConnectNpBlue),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (!comment.author.avatarUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = comment.author.avatarUrl,
+                                        contentDescription = comment.author.name,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Text(
+                                        text = comment.author.name.take(1).uppercase(),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                    .padding(10.dp)
+                            ) {
+                                Text(
+                                    text = comment.author.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = comment.text,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = comment.timeAgo,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -1000,23 +1194,38 @@ fun CommentBottomSheet(
                     onValueChange = { newCommentText = it },
                     placeholder = { Text(if (isNepali) "टिप्पणी लेख्नुहोस्..." else "Write a comment...") },
                     shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("comment_input_field"),
+                    singleLine = true,
+                    enabled = !isSending
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
 
                 IconButton(
                     onClick = {
-                        if (newCommentText.isNotBlank()) {
-                            sampleComments.add(
-                                Comment(
-                                    id = "c_${System.currentTimeMillis()}",
-                                    author = SampleDataProvider.currentUser,
-                                    text = newCommentText,
-                                    timeAgo = "Just now"
-                                )
-                            )
-                            onAddComment(newCommentText)
+                        val commentToSend = newCommentText.trim()
+                        if (commentToSend.isNotBlank()) {
+                            isSending = true
+                            val activeUser = ConnectNpRepository.getCurrentActiveUser()
+                            onAddComment(commentToSend)
+
+                            coroutineScope.launch {
+                                try {
+                                    firestoreRepo.addComment(
+                                        postId = post.id,
+                                        text = commentToSend,
+                                        authorName = activeUser.name,
+                                        authorHandle = activeUser.handle,
+                                        authorAvatarUrl = activeUser.avatarUrl ?: ""
+                                    )
+                                } catch (e: Exception) {
+                                    android.util.Log.w("FeedScreen", "Comment saved locally, Firestore error: ${e.message}")
+                                } finally {
+                                    isSending = false
+                                }
+                            }
                             newCommentText = ""
                         }
                     },
@@ -1024,8 +1233,14 @@ fun CommentBottomSheet(
                         .size(44.dp)
                         .clip(CircleShape)
                         .background(ConnectNpBlue)
+                        .testTag("comment_send_button"),
+                    enabled = !isSending && newCommentText.isNotBlank()
                 ) {
-                    Icon(imageVector = Icons.Default.Send, contentDescription = "Send", tint = Color.White)
+                    if (isSending) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Icon(imageVector = Icons.Default.Send, contentDescription = "Send", tint = Color.White)
+                    }
                 }
             }
         }

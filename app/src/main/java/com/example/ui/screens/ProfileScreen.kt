@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -26,11 +27,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.ConnectNpFirestoreRepository
 import com.example.data.ConnectNpRepository
 import com.example.data.SampleDataProvider
 import com.example.model.Post
+import com.example.ui.components.EditProfileDialog
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
 import com.example.ui.theme.PoppinsFontFamily
@@ -51,11 +54,20 @@ fun ProfileScreen(
     val currentUser = Firebase.auth.currentUser
     val firestoreRepo = remember { ConnectNpFirestoreRepository(context) }
 
-    var displayName by remember {
-        mutableStateOf(currentUser?.displayName ?: SampleDataProvider.currentUser.name)
+    val userProfileDoc by firestoreRepo.observeUserProfile().collectAsState(initial = null)
+
+    var displayName by remember(currentUser, userProfileDoc) {
+        val resolved = userProfileDoc?.name?.takeIf { it.isNotBlank() }
+            ?: currentUser?.displayName?.takeIf { it.isNotBlank() }
+            ?: currentUser?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+            ?: "ConnectNP Member"
+        mutableStateOf(resolved)
     }
-    var userBio by remember {
-        mutableStateOf("Passionate creator on CONNECTNP • Building Nepal's digital future 🇳🇵")
+    var userBio by remember(userProfileDoc) {
+        mutableStateOf(userProfileDoc?.bio ?: "Passionate creator on CONNECTNP • Building Nepal's digital future 🇳🇵")
+    }
+    var userPhotoUrl by remember(currentUser, userProfileDoc) {
+        mutableStateOf(userProfileDoc?.photoUrl?.ifBlank { null } ?: currentUser?.photoUrl?.toString())
     }
     var showEditDialog by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) } // 0: My Posts, 1: Bookmarks, 2: Badges
@@ -105,12 +117,21 @@ fun ProfileScreen(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = displayName.take(1).uppercase(),
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White
-                        )
+                        if (!userPhotoUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = userPhotoUrl,
+                                contentDescription = displayName,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(
+                                text = displayName.take(1).uppercase(),
+                                fontSize = 36.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -342,59 +363,19 @@ fun ProfileScreen(
         }
     }
 
-    // Edit Profile Dialog
+    // Edit Profile Dialog (TASK 1: Firestore & Storage Picture Upload)
     if (showEditDialog) {
-        var editName by remember { mutableStateOf(displayName) }
-        var editBio by remember { mutableStateOf(userBio) }
-        var isSaving by remember { mutableStateOf(false) }
-
-        AlertDialog(
-            onDismissRequest = { if (!isSaving) showEditDialog = false },
-            title = { Text(if (isNepali) "प्रोफाइल सम्पादन गर्नुहोस्" else "Edit Profile", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = editName,
-                        onValueChange = { editName = it },
-                        label = { Text(if (isNepali) "पूरा नाम" else "Full Name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = editBio,
-                        onValueChange = { editBio = it },
-                        label = { Text(if (isNepali) "बायो" else "Bio") },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 3
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        isSaving = true
-                        displayName = editName
-                        userBio = editBio
-                        coroutineScope.launch {
-                            try {
-                                firestoreRepo.updateUserProfile(editName, editBio)
-                            } catch (e: Exception) {
-                                // Handled
-                            } finally {
-                                isSaving = false
-                                showEditDialog = false
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
-                    enabled = !isSaving
-                ) {
-                    Text(if (isSaving) "Saving..." else "Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }, enabled = !isSaving) {
-                    Text("Cancel")
-                }
+        EditProfileDialog(
+            initialName = displayName,
+            initialBio = userBio,
+            initialPhotoUrl = userPhotoUrl,
+            isNepali = isNepali,
+            onDismiss = { showEditDialog = false },
+            onProfileUpdated = { newName, newBio, newPhotoUrl ->
+                displayName = newName
+                userBio = newBio
+                userPhotoUrl = newPhotoUrl
+                ConnectNpRepository.updateActiveUser(name = newName, bio = newBio, photoUrl = newPhotoUrl)
             }
         )
     }

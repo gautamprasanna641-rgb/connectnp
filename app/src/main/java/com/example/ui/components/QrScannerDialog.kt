@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import com.example.data.ConnectNpRepository
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -94,6 +95,7 @@ fun QrScannerDialog(
 
                 if (selectedTab == 0) {
                     // My QR Code
+                    val activeUser = ConnectNpRepository.getCurrentActiveUser()
                     Spacer(modifier = Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
@@ -119,7 +121,7 @@ fun QrScannerDialog(
                                 modifier = Modifier.size(140.dp)
                             )
                             Text(
-                                text = "connectnp.me/${SampleDataProvider.currentUser.handle.removePrefix("@")}",
+                                text = "connectnp.me/${activeUser.handle.removePrefix("@")}",
                                 fontSize = 10.sp,
                                 color = Color.Gray,
                                 fontWeight = FontWeight.Medium
@@ -129,12 +131,12 @@ fun QrScannerDialog(
 
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = SampleDataProvider.currentUser.name,
+                        text = activeUser.name,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${SampleDataProvider.currentUser.handle} • Nepal Verified",
+                        text = "${activeUser.handle} • Nepal Verified",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

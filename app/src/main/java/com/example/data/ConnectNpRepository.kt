@@ -5,6 +5,7 @@ import com.example.R
 import com.example.model.*
 import com.example.service.ConnectNpMessagingService
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -131,11 +132,106 @@ object ConnectNpRepository {
         _unreadNotifications.value = 0
     }
 
+    fun incrementUnreadNotifications() {
+        _unreadNotifications.value += 1
+    }
+
+    // --- Dynamic User Resolution ---
+    private val _currentActiveUser = MutableStateFlow<User>(resolveCurrentUserFromFirebase())
+    val currentActiveUser: StateFlow<User> = _currentActiveUser.asStateFlow()
+
+    private fun resolveCurrentUserFromFirebase(
+        profileDoc: FirestoreUserProfile? = null,
+        authUser: FirebaseUser? = null,
+        overrideName: String? = null,
+        overrideHandle: String? = null,
+        overridePhoto: String? = null,
+        overrideBio: String? = null
+    ): User {
+        val fbUser = authUser ?: try {
+            Firebase.auth.currentUser
+        } catch (e: Exception) {
+            null
+        }
+
+        val id = fbUser?.uid ?: profileDoc?.userId?.ifBlank { null } ?: "user_me"
+
+        val name = overrideName?.takeIf { it.isNotBlank() }
+            ?: profileDoc?.name?.takeIf { it.isNotBlank() }
+            ?: fbUser?.displayName?.takeIf { it.isNotBlank() }
+            ?: fbUser?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+            ?: "ConnectNP Member"
+
+        val rawHandle = overrideHandle?.takeIf { it.isNotBlank() }
+            ?: profileDoc?.handle?.takeIf { it.isNotBlank() }
+            ?: fbUser?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+            ?: "member"
+        val handle = if (rawHandle.startsWith("@")) rawHandle else "@$rawHandle"
+
+        val photo = overridePhoto?.takeIf { it.isNotBlank() }
+            ?: profileDoc?.photoUrl?.takeIf { it.isNotBlank() }
+            ?: fbUser?.photoUrl?.toString()
+
+        val bio = overrideBio?.takeIf { it.isNotBlank() }
+            ?: profileDoc?.bio?.takeIf { it.isNotBlank() }
+            ?: "Proud ConnectNP Citizen 🇳🇵"
+
+        return User(
+            id = id,
+            name = name,
+            handle = handle,
+            avatarUrl = photo,
+            avatarResId = if (photo.isNullOrBlank()) R.drawable.connectnp_icon_full else null,
+            isVerified = true,
+            isCreator = true,
+            bio = bio,
+            location = "Kathmandu, Nepal",
+            followersCount = 1,
+            followingCount = 1
+        )
+    }
+
+    fun updateActiveUser(
+        profileDoc: FirestoreUserProfile? = null,
+        authUser: FirebaseUser? = null,
+        name: String? = null,
+        handle: String? = null,
+        photoUrl: String? = null,
+        bio: String? = null
+    ) {
+        val resolved = resolveCurrentUserFromFirebase(
+            profileDoc = profileDoc,
+            authUser = authUser,
+            overrideName = name,
+            overrideHandle = handle,
+            overridePhoto = photoUrl,
+            overrideBio = bio
+        )
+        _currentActiveUser.value = resolved
+    }
+
+    fun getCurrentActiveUser(): User {
+        val fbUser = try {
+            Firebase.auth.currentUser
+        } catch (e: Exception) {
+            null
+        }
+        val cached = _currentActiveUser.value
+        return if (fbUser != null && (cached.id != fbUser.uid || cached.name == "ConnectNP Member")) {
+            val fresh = resolveCurrentUserFromFirebase(authUser = fbUser)
+            _currentActiveUser.value = fresh
+            fresh
+        } else {
+            cached
+        }
+    }
+
     // --- Posts Logic ---
-    fun addPost(content: String, location: String? = null, mediaResId: Int? = null) {
+    fun addPost(content: String, location: String? = null, mediaResId: Int? = null, customAuthor: User? = null) {
+        val author = customAuthor ?: getCurrentActiveUser()
         val newPost = Post(
             id = "post_${System.currentTimeMillis()}",
-            author = SampleDataProvider.currentUser,
+            author = author,
             content = content,
             locationName = location ?: "Kathmandu, Nepal",
             mediaResId = mediaResId,
@@ -148,7 +244,9 @@ object ConnectNpRepository {
         _posts.value = listOf(newPost) + _posts.value
     }
 
-    fun toggleReaction(postId: String, reaction: ReactionType) {
+    fun toggleReaction(postId: String, reaction: ReactionType, context: Context? = null) {
+        var isNewReaction = false
+        var reactedPostTitle: String? = null
         _posts.value = _posts.value.map { post ->
             if (post.id == postId) {
                 val current = post.userReaction
@@ -159,12 +257,22 @@ object ConnectNpRepository {
                     )
                 } else {
                     val delta = if (current == null) 1 else 0
+                    isNewReaction = true
+                    reactedPostTitle = post.content.take(35)
                     post.copy(
                         userReaction = reaction,
                         likesCount = post.likesCount + delta
                     )
                 }
             } else post
+        }
+
+        if (isNewReaction && context != null) {
+            incrementUnreadNotifications()
+            val reactionEmoji = reaction.emoji
+            val title = "New Reaction! $reactionEmoji"
+            val body = "Someone reacted $reactionEmoji on ConnectNP: \"${reactedPostTitle ?: "Post"}\""
+            ConnectNpMessagingService.showLocalNotification(context, title, body, "like")
         }
     }
 
@@ -190,7 +298,38 @@ object ConnectNpRepository {
         }
     }
 
-    fun addComment(postId: String, text: String) {
+    fun incrementShareCount(postId: String) {
+        _posts.value = _posts.value.map { post ->
+            if (post.id == postId) post.copy(sharesCount = post.sharesCount + 1) else post
+        }
+    }
+
+    private val _commentsByPost = MutableStateFlow<Map<String, List<Comment>>>(
+        mapOf(
+            "p1" to listOf(
+                Comment("c_init_1", SampleDataProvider.aayushUser, "Proud of this movement! Connecting Nepal with world-class tech 🇳🇵", "1h ago", 12, true),
+                Comment("c_init_2", SampleDataProvider.poojaUser, "Amazing photography and initiative! Looking forward to the meetup.", "45m ago", 8, false)
+            )
+        )
+    )
+    val commentsByPost: StateFlow<Map<String, List<Comment>>> = _commentsByPost.asStateFlow()
+
+    fun getCommentsForPost(postId: String): List<Comment> {
+        return _commentsByPost.value[postId] ?: emptyList()
+    }
+
+    fun addComment(postId: String, text: String, commentAuthor: User? = null) {
+        val author = commentAuthor ?: getCurrentActiveUser()
+        val newComment = Comment(
+            id = "comment_${System.currentTimeMillis()}",
+            author = author,
+            text = text,
+            timeAgo = "Just now",
+            likesCount = 0,
+            isLiked = false
+        )
+        val existing = _commentsByPost.value[postId] ?: emptyList()
+        _commentsByPost.value = _commentsByPost.value + (postId to (existing + newComment))
         _posts.value = _posts.value.map { post ->
             if (post.id == postId) {
                 post.copy(commentsCount = post.commentsCount + 1)
@@ -208,7 +347,7 @@ object ConnectNpRepository {
     fun addStory(caption: String) {
         val newStory = Story(
             id = "story_${System.currentTimeMillis()}",
-            author = SampleDataProvider.currentUser,
+            author = getCurrentActiveUser(),
             caption = caption,
             mediaResId = R.drawable.himalaya_banner_1792096400169,
             timestamp = "Just now",
@@ -218,15 +357,26 @@ object ConnectNpRepository {
     }
 
     // --- Reels Logic ---
-    fun toggleReelLike(reelId: String) {
+    fun toggleReelLike(reelId: String, context: Context? = null) {
+        var isLiked = false
         _reels.value = _reels.value.map { reel ->
             if (reel.id == reelId) {
                 val newLiked = !reel.isLiked
+                isLiked = newLiked
                 reel.copy(
                     isLiked = newLiked,
                     likesCount = if (newLiked) reel.likesCount + 1 else reel.likesCount - 1
                 )
             } else reel
+        }
+        if (isLiked && context != null) {
+            incrementUnreadNotifications()
+            ConnectNpMessagingService.showLocalNotification(
+                context = context,
+                title = "New Reel Like! ❤️",
+                body = "Someone liked your trending Reel on ConnectNP!",
+                type = "like"
+            )
         }
     }
 
@@ -237,10 +387,16 @@ object ConnectNpRepository {
     }
 
     // --- Chat Logic ---
-    fun sendMessage(threadId: String, text: String, mediaType: MessageMediaType = MessageMediaType.TEXT, audioDurationSec: Int? = null) {
+    fun sendMessage(
+        threadId: String,
+        text: String,
+        mediaType: MessageMediaType = MessageMediaType.TEXT,
+        audioDurationSec: Int? = null,
+        context: Context? = null
+    ) {
         val userMsg = ChatMessage(
             id = "msg_${System.currentTimeMillis()}",
-            senderId = SampleDataProvider.currentUser.id,
+            senderId = getCurrentActiveUser().id,
             text = text,
             timestamp = "Just now",
             isFromMe = true,
@@ -264,13 +420,55 @@ object ConnectNpRepository {
             } else thread
         }
 
-        // ConnectNP AI response generator
+        // Response generator with local notification
         if (threadId == "chat_ai") {
-            generateAiResponse(text)
+            generateAiResponse(text, context)
+        } else {
+            simulatePeerResponse(threadId, context)
         }
     }
 
-    private fun generateAiResponse(userPrompt: String) {
+    private fun simulatePeerResponse(threadId: String, context: Context? = null) {
+        val targetThread = _chatThreads.value.find { it.id == threadId } ?: return
+        val sender = targetThread.user
+        CoroutineScope(Dispatchers.Main).launch {
+            kotlinx.coroutines.delay(1800)
+            val replyText = when (threadId) {
+                "chat_pooja" -> "Namaste! Thanks for connecting. Let me know when you visit Pokhara or need trek tips! 🏔️✨"
+                "chat_aayush" -> "Hey! Thanks for your message. Checking out the latest Nepal artisan listings now! 🛍️"
+                else -> "Namaste! Received your message on CONNECTNP. Catch you shortly!"
+            }
+            val peerMsg = ChatMessage(
+                id = "peer_${System.currentTimeMillis()}",
+                senderId = sender.id,
+                text = replyText,
+                timestamp = "Just now",
+                isFromMe = false
+            )
+            val list = _messagesByThread.value[threadId] ?: emptyList()
+            val map = _messagesByThread.value.toMutableMap()
+            map[threadId] = list + peerMsg
+            _messagesByThread.value = map
+
+            _chatThreads.value = _chatThreads.value.map { thread ->
+                if (thread.id == threadId) {
+                    thread.copy(lastMessage = replyText, lastMessageTime = "Just now")
+                } else thread
+            }
+
+            if (context != null) {
+                incrementUnreadNotifications()
+                ConnectNpMessagingService.showLocalNotification(
+                    context = context,
+                    title = "New Message from ${sender.name} 💬",
+                    body = replyText,
+                    type = "chat"
+                )
+            }
+        }
+    }
+
+    private fun generateAiResponse(userPrompt: String, context: Context? = null) {
         val lower = userPrompt.lowercase()
         val reply = when {
             lower.contains("momo") || lower.contains("food") ->
@@ -285,23 +483,36 @@ object ConnectNpRepository {
                 "Namaste! ConnectNP AI here. I can assist you with sharing posts, exploring Marketplace listings, sending funds with ConnectNP Pay, or discovering trending Reels across Nepal! 🇳🇵✨"
         }
 
-        val aiMsg = ChatMessage(
-            id = "ai_${System.currentTimeMillis()}",
-            senderId = SampleDataProvider.aiBotUser.id,
-            text = reply,
-            timestamp = "Just now",
-            isFromMe = false
-        )
+        CoroutineScope(Dispatchers.Main).launch {
+            kotlinx.coroutines.delay(1000)
+            val aiMsg = ChatMessage(
+                id = "ai_${System.currentTimeMillis()}",
+                senderId = SampleDataProvider.aiBotUser.id,
+                text = reply,
+                timestamp = "Just now",
+                isFromMe = false
+            )
 
-        val currentList = _messagesByThread.value["chat_ai"] ?: emptyList()
-        val updatedMap = _messagesByThread.value.toMutableMap()
-        updatedMap["chat_ai"] = currentList + aiMsg
-        _messagesByThread.value = updatedMap
+            val currentList = _messagesByThread.value["chat_ai"] ?: emptyList()
+            val updatedMap = _messagesByThread.value.toMutableMap()
+            updatedMap["chat_ai"] = currentList + aiMsg
+            _messagesByThread.value = updatedMap
 
-        _chatThreads.value = _chatThreads.value.map { thread ->
-            if (thread.id == "chat_ai") {
-                thread.copy(lastMessage = reply.take(60) + "...", lastMessageTime = "Just now")
-            } else thread
+            _chatThreads.value = _chatThreads.value.map { thread ->
+                if (thread.id == "chat_ai") {
+                    thread.copy(lastMessage = reply.take(60) + "...", lastMessageTime = "Just now")
+                } else thread
+            }
+
+            if (context != null) {
+                incrementUnreadNotifications()
+                ConnectNpMessagingService.showLocalNotification(
+                    context = context,
+                    title = "ConnectNP Assistant 🤖",
+                    body = reply,
+                    type = "chat"
+                )
+            }
         }
     }
 
@@ -313,7 +524,7 @@ object ConnectNpRepository {
             priceNpr = price,
             category = category,
             location = location,
-            seller = SampleDataProvider.currentUser,
+            seller = getCurrentActiveUser(),
             condition = "Brand New",
             imageResId = R.drawable.nepal_crafts_1792096421296,
             description = description,
@@ -378,8 +589,30 @@ object ConnectNpRepository {
         _fcmToken.value = token
     }
 
-    fun blockUser(userId: String, userName: String, context: Context? = null) {
-        _blockedUserIds.value = _blockedUserIds.value + userId
+    fun setBlockedUserIds(ids: List<String>) {
+        _blockedUserIds.value = _blockedUserIds.value + ids
+    }
+
+    fun isUserBlocked(userId: String, handle: String = "", name: String = ""): Boolean {
+        val blocked = _blockedUserIds.value
+        if (userId.isNotBlank() && userId in blocked) return true
+        val cleanHandle = handle.removePrefix("@")
+        if (cleanHandle.isNotBlank()) {
+            if (cleanHandle in blocked || "@$cleanHandle" in blocked) return true
+        }
+        if (name.isNotBlank() && name in blocked) return true
+        return false
+    }
+
+    fun blockUser(userId: String, userName: String, context: Context? = null, userHandle: String? = null) {
+        val identifiers = mutableSetOf(userId)
+        if (!userHandle.isNullOrBlank()) {
+            val clean = userHandle.removePrefix("@")
+            identifiers.add(clean)
+            identifiers.add("@$clean")
+        }
+        identifiers.add(userName)
+        _blockedUserIds.value = _blockedUserIds.value + identifiers
         _blockedUserNames.value = _blockedUserNames.value + (userId to userName)
         if (context != null) {
             val firestoreRepo = ConnectNpFirestoreRepository(context)
@@ -393,8 +626,17 @@ object ConnectNpRepository {
         }
     }
 
-    fun unblockUser(userId: String, context: Context? = null) {
-        _blockedUserIds.value = _blockedUserIds.value - userId
+    fun unblockUser(userId: String, context: Context? = null, userHandle: String? = null, userName: String? = null) {
+        val identifiers = mutableSetOf(userId)
+        if (!userHandle.isNullOrBlank()) {
+            val clean = userHandle.removePrefix("@")
+            identifiers.add(clean)
+            identifiers.add("@$clean")
+        }
+        if (!userName.isNullOrBlank()) {
+            identifiers.add(userName)
+        }
+        _blockedUserIds.value = _blockedUserIds.value - identifiers
         _blockedUserNames.value = _blockedUserNames.value - userId
         if (context != null) {
             val firestoreRepo = ConnectNpFirestoreRepository(context)
@@ -429,8 +671,11 @@ object ConnectNpRepository {
 
     // --- Account Deletion (Mandatory for Play Store) ---
     suspend fun deleteUserAccount(context: Context): Result<Unit> {
-        val user = Firebase.auth.currentUser
-            ?: return Result.failure(IllegalStateException("No authenticated user found"))
+        val user = try {
+            Firebase.auth.currentUser
+        } catch (e: Exception) {
+            null
+        } ?: return Result.failure(IllegalStateException("No authenticated user found"))
         val uid = user.uid
         return try {
             val firestoreRepo = ConnectNpFirestoreRepository(context)

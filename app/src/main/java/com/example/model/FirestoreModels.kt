@@ -11,11 +11,24 @@ data class FirestoreUserProfile(
     val name: String = "",
     val handle: String = "",
     val bio: String = "",
+    val photoUrl: String = "",
     val walletBalance: Long = 0L,
     val blockedUsers: List<String> = emptyList(),
     val fcmToken: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class FirestoreComment(
+    val id: String = "",
+    val postId: String = "",
+    val userId: String = "",
+    val authorName: String = "",
+    val authorHandle: String = "",
+    val authorAvatarUrl: String = "",
+    val text: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null
 )
 
 @IgnoreExtraProperties

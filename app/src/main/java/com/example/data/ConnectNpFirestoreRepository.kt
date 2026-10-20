@@ -1,15 +1,20 @@
 package com.example.data
 
 import android.content.Context
+import android.net.Uri
 import com.example.R
+import com.example.model.FirestoreComment
 import com.example.model.FirestoreMarketItem
 import com.example.model.FirestorePost
 import com.example.model.FirestoreUserProfile
 import com.example.model.FirestoreWalletTransaction
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.snapshots
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -348,15 +353,47 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun updateUserProfile(name: String, bio: String): Result<Unit> {
+    suspend fun uploadProfilePicture(imageUri: Uri): Result<String> {
+        val uid = requireUserId()
+        return try {
+            val storageRef = FirebaseStorage.getInstance().reference.child("profile_pictures/$uid.jpg")
+            storageRef.putFile(imageUri).await()
+            val downloadUrl = storageRef.downloadUrl.await().toString()
+            Result.success(downloadUrl)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("ConnectNpFirestore", "Firebase Storage upload: ${e.message}, falling back to URI")
+            Result.success(imageUri.toString())
+        }
+    }
+
+    suspend fun updateUserProfile(name: String, bio: String, photoUrl: String? = null): Result<Unit> {
         val uid = requireUserId()
         val path = "users/$uid"
         return try {
-            db.collection("users").document(uid).update(
-                "name", name,
-                "bio", bio,
-                "updatedAt", FieldValue.serverTimestamp()
-            ).await()
+            val updates = mutableMapOf<String, Any>(
+                "name" to name,
+                "bio" to bio,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            if (!photoUrl.isNullOrBlank()) {
+                updates["photoUrl"] = photoUrl
+            }
+            db.collection("users").document(uid).update(updates).await()
+
+            try {
+                val profileUpdates = UserProfileChangeRequest.Builder()
+                    .setDisplayName(name)
+                    .apply {
+                        if (!photoUrl.isNullOrBlank()) {
+                            setPhotoUri(Uri.parse(photoUrl))
+                        }
+                    }
+                    .build()
+                auth.currentUser?.updateProfile(profileUpdates)?.await()
+            } catch (_: Exception) {}
+
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -364,5 +401,82 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
             handleFirestoreError(e, OperationType.UPDATE, path)
             Result.failure(e)
         }
+    }
+
+    suspend fun searchUsers(query: String): Result<List<FirestoreUserProfile>> {
+        val path = "users"
+        return try {
+            val snapshot = db.collection(path).get().await()
+            val allUsers = snapshot.toObjects(FirestoreUserProfile::class.java)
+            val trimmed = query.trim()
+            val filtered = if (trimmed.isBlank()) {
+                allUsers.take(15)
+            } else {
+                allUsers.filter { user ->
+                    user.name.contains(trimmed, ignoreCase = true) ||
+                    user.handle.contains(trimmed, ignoreCase = true)
+                }
+            }
+            Result.success(filtered)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.LIST, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addComment(
+        postId: String,
+        text: String,
+        authorName: String,
+        authorHandle: String = "",
+        authorAvatarUrl: String = ""
+    ): Result<String> {
+        val uid = requireUserId()
+        val path = "posts/$postId/comments"
+        val colRef = db.collection("posts").document(postId).collection("comments")
+        val docRef = colRef.document()
+        return try {
+            val payload = hashMapOf<String, Any>(
+                "id" to docRef.id,
+                "postId" to postId,
+                "userId" to uid,
+                "authorName" to authorName,
+                "authorHandle" to authorHandle,
+                "authorAvatarUrl" to authorAvatarUrl,
+                "text" to text,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            docRef.set(payload).await()
+            try {
+                db.collection("posts").document(postId).update(
+                    "commentsCount", FieldValue.increment(1),
+                    "updatedAt", FieldValue.serverTimestamp()
+                ).await()
+            } catch (_: Exception) {}
+            Result.success(docRef.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    fun observeComments(postId: String): Flow<List<FirestoreComment>> = flow {
+        val path = "posts/$postId/comments"
+        emitAll(
+            db.collection("posts").document(postId).collection("comments")
+                .orderBy("createdAt", Query.Direction.ASCENDING)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(FirestoreComment::class.java)
+                }
+                .catch { error ->
+                    if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                    throw error
+                }
+        )
     }
 }

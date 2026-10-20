@@ -7,15 +7,15 @@ object SampleDataProvider {
 
     val currentUser = User(
         id = "user_me",
-        name = "Prasanna Gautam",
-        handle = "@prasanna_np",
+        name = "ConnectNP Member",
+        handle = "@member",
         avatarResId = R.drawable.connectnp_icon_full,
-        isVerified = true,
-        isCreator = true,
-        bio = "Software Engineer & Builder 🇳🇵 | Exploring the Himalayas & building ConnectNP",
+        isVerified = false,
+        isCreator = false,
+        bio = "Proud ConnectNP Citizen 🇳🇵",
         location = "Kathmandu, Nepal",
-        followersCount = 4280,
-        followingCount = 385
+        followersCount = 0,
+        followingCount = 0
     )
 
     val aayushUser = User(
@@ -149,7 +149,7 @@ object SampleDataProvider {
         ),
         Post(
             id = "post_4",
-            author = currentUser,
+            author = officialUser,
             content = "Building the all-in-one super-app for our nation: Feeds, Reels, Chats with Voice Notes, Marketplace, Dating, Jobs, and ConnectNP Pay Wallet in one cohesive experience! Built with pure Jetpack Compose & Kotlin. 💻🚀 What feature do you use the most?",
             timestamp = "1 day ago",
             likesCount = 512,

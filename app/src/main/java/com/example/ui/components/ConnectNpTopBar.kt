@@ -36,6 +36,7 @@ fun ConnectNpTopBar(
     onOpenWallet: () -> Unit,
     onOpenQrScanner: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenSearch: () -> Unit = {},
     onToggleLanguage: () -> Unit,
     onToggleDark: () -> Unit
 ) {
@@ -190,6 +191,23 @@ fun ConnectNpTopBar(
                         Icon(
                             imageVector = Icons.Filled.QrCodeScanner,
                             contentDescription = "Scan QR",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Search Users Icon
+                    IconButton(
+                        onClick = onOpenSearch,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("topbar_search_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search Users",
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(20.dp)
                         )
