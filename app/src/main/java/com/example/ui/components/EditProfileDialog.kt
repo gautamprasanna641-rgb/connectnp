@@ -285,7 +285,7 @@ fun EditProfileDialog(
                                     }
 
                                     // 2. Save profile in Firestore & Firebase Auth
-                                    statusMessage = if (isNepali) "Firestore अपडेट हुँदैछ..." else "Saving to Firestore..."
+                                    statusMessage = if (isNepali) "प्रोफाइल अद्यावधिक गरिँदैछ..." else "Updating Profile..."
                                     firestoreRepo.updateUserProfile(
                                         name = cleanName,
                                         bio = editBio.trim(),

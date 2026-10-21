@@ -1077,19 +1077,12 @@ fun CommentBottomSheet(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = if (isNepali) "टिप्पणीहरू (${allComments.size})" else "Comments (${allComments.size})",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
-                )
-                Text(
-                    text = "Cloud Firestore ☁️",
-                    fontSize = 10.sp,
-                    color = ConnectNpBlue,
-                    fontWeight = FontWeight.SemiBold
                 )
             }
 

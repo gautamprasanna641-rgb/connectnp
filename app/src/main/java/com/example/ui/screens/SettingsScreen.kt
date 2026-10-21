@@ -263,7 +263,15 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    if (blockedUserIds.isEmpty()) {
+                    val displayBlockedUsers = remember(blockedUserIds, blockedUserNames) {
+                        if (blockedUserNames.isNotEmpty()) {
+                            blockedUserNames.toList()
+                        } else {
+                            blockedUserIds.filter { !it.startsWith("@") }.distinct().map { it to (blockedUserNames[it] ?: "User ($it)") }
+                        }
+                    }
+
+                    if (displayBlockedUsers.isEmpty()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 8.dp)
@@ -277,8 +285,7 @@ fun SettingsScreen(
                             )
                         }
                     } else {
-                        blockedUserIds.forEach { userId ->
-                            val userName = blockedUserNames[userId] ?: "User ($userId)"
+                        displayBlockedUsers.forEach { (userId, userName) ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -292,7 +299,7 @@ fun SettingsScreen(
                                     Text(text = userName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 }
                                 OutlinedButton(
-                                    onClick = { ConnectNpRepository.unblockUser(userId, context) },
+                                    onClick = { ConnectNpRepository.unblockUser(userId, context, userName = userName) },
                                     shape = RoundedCornerShape(12.dp),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                                     modifier = Modifier.height(32.dp)
@@ -300,7 +307,7 @@ fun SettingsScreen(
                                     Text(if (isNepali) "अनब्लक" else "Unblock", fontSize = 11.sp)
                                 }
                             }
-                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         }
                     }
                 }
