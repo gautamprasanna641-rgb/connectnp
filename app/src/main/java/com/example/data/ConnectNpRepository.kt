@@ -30,85 +30,40 @@ object ConnectNpRepository {
     private val _fcmToken = MutableStateFlow<String?>(null)
     val fcmToken: StateFlow<String?> = _fcmToken.asStateFlow()
 
-    private val _posts = MutableStateFlow(SampleDataProvider.getInitialPosts())
+    private val _posts = MutableStateFlow<List<Post>>(emptyList())
     val posts: StateFlow<List<Post>> = _posts.asStateFlow()
 
-    private val _stories = MutableStateFlow(SampleDataProvider.getInitialStories())
+    private val _stories = MutableStateFlow<List<Story>>(emptyList())
     val stories: StateFlow<List<Story>> = _stories.asStateFlow()
 
-    private val _reels = MutableStateFlow(SampleDataProvider.getInitialReels())
+    private val _reels = MutableStateFlow<List<Reel>>(emptyList())
     val reels: StateFlow<List<Reel>> = _reels.asStateFlow()
 
-    private val _chatThreads = MutableStateFlow(SampleDataProvider.getInitialChatThreads())
+    private val _chatThreads = MutableStateFlow<List<ChatThread>>(emptyList())
     val chatThreads: StateFlow<List<ChatThread>> = _chatThreads.asStateFlow()
 
-    private val _messagesByThread = MutableStateFlow<Map<String, List<ChatMessage>>>(
-        mapOf(
-            "chat_ai" to listOf(
-                ChatMessage(
-                    id = "m_ai_1",
-                    senderId = "user_ai",
-                    text = "नमस्ते! Welcome to ConnectNP. I'm your bilingual AI assistant. You can ask me to help write posts, translate English <-> Nepali, recommend travel itineraries in Nepal, or explain our features!",
-                    timestamp = "10:00 AM",
-                    isFromMe = false
-                )
-            ),
-            "chat_aayush" to listOf(
-                ChatMessage(
-                    id = "m_1",
-                    senderId = "user_aayush",
-                    text = "Dai, have you checked out the singing bowl listed on ConnectNP Marketplace?",
-                    timestamp = "12:30 PM",
-                    isFromMe = false
-                ),
-                ChatMessage(
-                    id = "m_2",
-                    senderId = "user_me",
-                    text = "Yes! The Patan artisan set looks fantastic. I will place the order through ConnectNP Pay Escrow right away.",
-                    timestamp = "12:35 PM",
-                    isFromMe = true,
-                    status = MessageStatus.READ
-                ),
-                ChatMessage(
-                    id = "m_3",
-                    senderId = "user_aayush",
-                    text = "Voice message from workshop",
-                    timestamp = "12:40 PM",
-                    isFromMe = false,
-                    mediaType = MessageMediaType.AUDIO_VOICE,
-                    audioDurationSec = 14
-                ),
-                ChatMessage(
-                    id = "m_4",
-                    senderId = "user_aayush",
-                    text = "Sent you the escrow payment receipt of रु 4,500 on ConnectNP Pay! 👍",
-                    timestamp = "12:45 PM",
-                    isFromMe = false
-                )
-            )
-        )
-    )
+    private val _messagesByThread = MutableStateFlow<Map<String, List<ChatMessage>>>(emptyMap())
     val messagesByThread: StateFlow<Map<String, List<ChatMessage>>> = _messagesByThread.asStateFlow()
 
-    private val _marketItems = MutableStateFlow(SampleDataProvider.getInitialMarketItems())
+    private val _marketItems = MutableStateFlow<List<MarketItem>>(emptyList())
     val marketItems: StateFlow<List<MarketItem>> = _marketItems.asStateFlow()
 
-    private val _watchVideos = MutableStateFlow(SampleDataProvider.getInitialWatchVideos())
+    private val _watchVideos = MutableStateFlow<List<WatchVideo>>(emptyList())
     val watchVideos: StateFlow<List<WatchVideo>> = _watchVideos.asStateFlow()
 
-    private val _jobs = MutableStateFlow(SampleDataProvider.getInitialJobs())
+    private val _jobs = MutableStateFlow<List<JobItem>>(emptyList())
     val jobs: StateFlow<List<JobItem>> = _jobs.asStateFlow()
 
-    private val _datingProfiles = MutableStateFlow(SampleDataProvider.getInitialDatingProfiles())
+    private val _datingProfiles = MutableStateFlow<List<DatingProfile>>(emptyList())
     val datingProfiles: StateFlow<List<DatingProfile>> = _datingProfiles.asStateFlow()
 
-    private val _datingMatches = MutableStateFlow(1)
+    private val _datingMatches = MutableStateFlow(0)
     val datingMatches: StateFlow<Int> = _datingMatches.asStateFlow()
 
-    private val _walletBalance = MutableStateFlow(14850.50)
+    private val _walletBalance = MutableStateFlow(0.0)
     val walletBalance: StateFlow<Double> = _walletBalance.asStateFlow()
 
-    private val _transactions = MutableStateFlow(SampleDataProvider.getInitialWalletTransactions())
+    private val _transactions = MutableStateFlow<List<WalletTransaction>>(emptyList())
     val transactions: StateFlow<List<WalletTransaction>> = _transactions.asStateFlow()
 
     private val _isNepaliLanguage = MutableStateFlow(false)
@@ -117,8 +72,24 @@ object ConnectNpRepository {
     private val _isDarkMode = MutableStateFlow(false)
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
-    private val _unreadNotifications = MutableStateFlow(4)
+    private val _unreadNotifications = MutableStateFlow(0)
     val unreadNotifications: StateFlow<Int> = _unreadNotifications.asStateFlow()
+
+    fun setPosts(newPosts: List<Post>) {
+        _posts.value = newPosts
+    }
+
+    fun setWalletBalance(balance: Double) {
+        _walletBalance.value = balance
+    }
+
+    fun setTransactions(newTransactions: List<WalletTransaction>) {
+        _transactions.value = newTransactions
+    }
+
+    fun setStories(newStories: List<Story>) {
+        _stories.value = newStories
+    }
 
     fun toggleLanguage() {
         _isNepaliLanguage.value = !_isNepaliLanguage.value
@@ -304,14 +275,7 @@ object ConnectNpRepository {
         }
     }
 
-    private val _commentsByPost = MutableStateFlow<Map<String, List<Comment>>>(
-        mapOf(
-            "p1" to listOf(
-                Comment("c_init_1", SampleDataProvider.aayushUser, "Proud of this movement! Connecting Nepal with world-class tech 🇳🇵", "1h ago", 12, true),
-                Comment("c_init_2", SampleDataProvider.poojaUser, "Amazing photography and initiative! Looking forward to the meetup.", "45m ago", 8, false)
-            )
-        )
-    )
+    private val _commentsByPost = MutableStateFlow<Map<String, List<Comment>>>(emptyMap())
     val commentsByPost: StateFlow<Map<String, List<Comment>>> = _commentsByPost.asStateFlow()
 
     fun getCommentsForPost(postId: String): List<Comment> {
@@ -353,7 +317,7 @@ object ConnectNpRepository {
             timestamp = "Just now",
             isViewed = false
         )
-        _stories.value = listOf(_stories.value.first()) + listOf(newStory) + _stories.value.drop(1)
+        _stories.value = listOf(newStory) + _stories.value
     }
 
     // --- Reels Logic ---
@@ -433,11 +397,7 @@ object ConnectNpRepository {
         val sender = targetThread.user
         CoroutineScope(Dispatchers.Main).launch {
             kotlinx.coroutines.delay(1800)
-            val replyText = when (threadId) {
-                "chat_pooja" -> "Namaste! Thanks for connecting. Let me know when you visit Pokhara or need trek tips! 🏔️✨"
-                "chat_aayush" -> "Hey! Thanks for your message. Checking out the latest Nepal artisan listings now! 🛍️"
-                else -> "Namaste! Received your message on CONNECTNP. Catch you shortly!"
-            }
+            val replyText = "Namaste! Received your message on CONNECTNP. Catch you shortly! 🇳🇵"
             val peerMsg = ChatMessage(
                 id = "peer_${System.currentTimeMillis()}",
                 senderId = sender.id,
@@ -534,7 +494,7 @@ object ConnectNpRepository {
     }
 
     // --- ConnectNP Pay Logic ---
-    fun sendMoney(recipientName: String, amount: Double, remarks: String): Boolean {
+    fun sendMoney(recipientName: String, amount: Double, remarks: String, context: Context? = null): Boolean {
         if (_walletBalance.value < amount) return false
         _walletBalance.value -= amount
         val newTx = WalletTransaction(
@@ -546,10 +506,21 @@ object ConnectNpRepository {
             category = remarks.ifEmpty { "P2P Payment" }
         )
         _transactions.value = listOf(newTx) + _transactions.value
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.addTransaction("P2P Transfer to $recipientName", amount.toLong(), "debit")
+                    repo.updateWalletBalance(_walletBalance.value.toLong())
+                } catch (e: Exception) {
+                    android.util.Log.d("ConnectNpRepo", "sendMoney firestore sync: ${e.message}")
+                }
+            }
+        }
         return true
     }
 
-    fun topUpWallet(amount: Double, source: String) {
+    fun topUpWallet(amount: Double, source: String, context: Context? = null) {
         _walletBalance.value += amount
         val newTx = WalletTransaction(
             id = "tx_${System.currentTimeMillis()}",
@@ -560,6 +531,17 @@ object ConnectNpRepository {
             category = "Wallet Top-Up"
         )
         _transactions.value = listOf(newTx) + _transactions.value
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.addTransaction("Top-Up via $source", amount.toLong(), "credit")
+                    repo.updateWalletBalance(_walletBalance.value.toLong())
+                } catch (e: Exception) {
+                    android.util.Log.d("ConnectNpRepo", "topUpWallet firestore sync: ${e.message}")
+                }
+            }
+        }
     }
 
     // --- Jobs Logic ---

@@ -842,8 +842,8 @@ fun LiveStreamSubSection(
             }
 
             Text("Live Comments Stream:", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-            Text("Aayush Sharma: Namaste from Kathmandu! 🇳🇵", color = Color.White, fontSize = 13.sp)
-            Text("Pooja Shrestha: Beautiful mountain sunset! 🏔️✨", color = Color.White, fontSize = 13.sp)
+            Text("• Namaste from Kathmandu! 🇳🇵", color = Color.White, fontSize = 13.sp)
+            Text("• Beautiful mountain sunset! 🏔️✨", color = Color.White, fontSize = 13.sp)
 
             Spacer(modifier = Modifier.height(16.dp))
 

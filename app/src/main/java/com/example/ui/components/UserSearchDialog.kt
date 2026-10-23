@@ -54,38 +54,7 @@ fun UserSearchDialog(
     var firestoreUsers by remember { mutableStateOf<List<FirestoreUserProfile>>(emptyList()) }
     val followedUserIds = remember { mutableStateListOf<String>() }
 
-    val localUsers = remember {
-        listOf(
-            ConnectNpRepository.getCurrentActiveUser(),
-            SampleDataProvider.aayushUser,
-            SampleDataProvider.poojaUser,
-            SampleDataProvider.officialUser,
-            User(
-                id = "user_sita",
-                name = "Sita Rai",
-                handle = "@sita_rai",
-                bio = "Trekking enthusiast in Everest region 🏔️",
-                location = "Namche Bazaar, Nepal",
-                isVerified = true
-            ),
-            User(
-                id = "user_bikash",
-                name = "Bikash Thapa",
-                handle = "@bikash_ktm",
-                bio = "Fintech engineer in Kathmandu 💻",
-                location = "Kathmandu, Nepal",
-                isVerified = false
-            ),
-            User(
-                id = "user_anita",
-                name = "Anita Gurung",
-                handle = "@anita_g",
-                bio = "Handicraft artisan & community organizer in Patan 🌸",
-                location = "Patan, Nepal",
-                isVerified = true
-            )
-        )
-    }
+    val localUsers = remember { emptyList<User>() }
 
     // Launch search query whenever searchQuery changes
     LaunchedEffect(searchQuery) {

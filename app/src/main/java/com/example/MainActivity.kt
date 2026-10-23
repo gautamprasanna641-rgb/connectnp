@@ -25,6 +25,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.ConnectNpRepository
 import com.example.model.MessageMediaType
 import com.example.model.User
+import com.example.model.toPost
+import com.example.model.toWalletTransaction
 import com.example.ui.components.*
 import com.example.ui.screens.*
 import com.example.ui.theme.ConnectNpBlue
@@ -123,6 +125,23 @@ fun ConnectNpMainApp(
             if (blockedList.isNotEmpty()) {
                 ConnectNpRepository.setBlockedUserIds(blockedList)
             }
+        }
+        userProfileDoc?.walletBalance?.let { balance ->
+            ConnectNpRepository.setWalletBalance(balance.toDouble())
+        }
+    }
+
+    // Real-time Firestore sync for Posts
+    LaunchedEffect(firestoreRepo) {
+        firestoreRepo.observeAllPosts().collect { fsPosts ->
+            ConnectNpRepository.setPosts(fsPosts.map { it.toPost() })
+        }
+    }
+
+    // Real-time Firestore sync for Wallet Transactions
+    LaunchedEffect(firestoreRepo) {
+        firestoreRepo.observeTransactions().collect { fsTransactions ->
+            ConnectNpRepository.setTransactions(fsTransactions.map { it.toWalletTransaction() })
         }
     }
 
@@ -236,10 +255,10 @@ fun ConnectNpMainApp(
                     transactions = transactions,
                     isNepali = isNepali,
                     onSendMoney = { recipient, amount, remarks ->
-                        ConnectNpRepository.sendMoney(recipient, amount, remarks)
+                        ConnectNpRepository.sendMoney(recipient, amount, remarks, context)
                     },
                     onTopUp = { amount, source ->
-                        ConnectNpRepository.topUpWallet(amount, source)
+                        ConnectNpRepository.topUpWallet(amount, source, context)
                     },
                     onScanQr = { showQrDialog = true }
                 )
@@ -357,7 +376,7 @@ fun ConnectNpMainApp(
     }
 
     // Story Viewer Dialog
-    if (activeStoryIndex != null) {
+    if (activeStoryIndex != null && activeStoryIndex!! in stories.indices) {
         StoryViewerDialog(
             stories = stories,
             initialIndex = activeStoryIndex!!,
@@ -453,12 +472,36 @@ fun ConnectNpMainApp(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                listOf(
-                    Pair("Aayush Sharma reacted 🙏 Namaste to your post", "10m ago"),
-                    Pair("Escrow payment received: रु 4,500 deposited into ConnectNP Pay", "1h ago"),
-                    Pair("Pooja Shrestha shared a new 4K Himalayan reel", "3h ago"),
-                    Pair("ConnectNP AI is ready to help translate and write posts", "1d ago")
-                ).forEach { (notif, time) ->
+                if (unreadNotifications == 0) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = if (isNepali) "कुनै नयाँ सूचना छैन" else "No notifications yet",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (isNepali) "तपाईंका सबै गतिविधिहरूको सूचना यहाँ देखिनेछ।" else "All your activity alerts will appear here.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -476,8 +519,12 @@ fun ConnectNpMainApp(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = notif, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text(text = time, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = if (isNepali) "तपाईंको नयाँ गतिविधि सूचना प्राप्त भएको छ" else "You have new activity notifications",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(text = "Just now", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))

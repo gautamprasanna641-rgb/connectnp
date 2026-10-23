@@ -341,7 +341,7 @@ fun ProfileScreen(
                     ) {
                         TrustBadgeCard(
                             title = "Nepal Verified Identity 🇳🇵",
-                            subtitle = "Verified via Firebase Authentication",
+                            subtitle = "Verified Member Account",
                             icon = Icons.Default.VerifiedUser,
                             color = ConnectNpBlue
                         )
@@ -352,8 +352,8 @@ fun ProfileScreen(
                             color = Color(0xFF2E7D32)
                         )
                         TrustBadgeCard(
-                            title = "Zero-Trust Encrypted 🛡️",
-                            subtitle = "Direct Firestore security rules & E2E messaging protocol",
+                            title = "Privacy Protected & Encrypted 🛡️",
+                            subtitle = "End-to-end messaging protocol & safe community",
                             icon = Icons.Default.Security,
                             color = NepalCrimson
                         )

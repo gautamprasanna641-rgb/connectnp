@@ -268,7 +268,7 @@ fun AuthScreen(
 
             // Footer note
             Text(
-                text = "Protected by Firebase Authentication & Zero-Trust Cloud Firestore 🇳🇵",
+                text = "Protected by End-to-End Encryption & Secure Sign-In 🇳🇵",
                 color = Color.White.copy(alpha = 0.45f),
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center,

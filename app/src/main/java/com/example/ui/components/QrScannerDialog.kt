@@ -184,13 +184,13 @@ fun QrScannerDialog(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            onSimulateScanSuccess("aayush_dev")
+                            onSimulateScanSuccess("member_np")
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Simulate Scan (Aayush Sharma)")
+                        Text("Simulate Scan (Test QR Code)")
                     }
                 }
             }

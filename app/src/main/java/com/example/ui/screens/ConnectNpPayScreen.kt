@@ -102,9 +102,14 @@ fun ConnectNpPayScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Linked with eSewa & Khalti • Protected by Escrow",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 11.sp
+                        text = if (balance <= 0.0) {
+                            if (isNepali) "तपाईंको वालेट मौज्दात रु ० छ" else "Your wallet balance is Rs 0"
+                        } else {
+                            "Linked with eSewa & Khalti • Protected by Escrow"
+                        },
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 11.sp,
+                        fontWeight = if (balance <= 0.0) FontWeight.Medium else FontWeight.Normal
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -191,52 +196,92 @@ fun ConnectNpPayScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        // Transactions List
-        items(transactions, key = { it.id }) { tx ->
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            ) {
-                Row(
+        // Transactions List or Empty State
+        if (transactions.isEmpty()) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 8.dp)
+                        .testTag("transactions_empty_state")
                 ) {
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (tx.isCredit) ConnectNpSuccess.copy(alpha = 0.15f)
-                                else NepalCrimson.copy(alpha = 0.15f)
-                            ),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
-                            imageVector = if (tx.isCredit) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                            imageVector = Icons.Default.Receipt,
                             contentDescription = null,
-                            tint = if (tx.isCredit) ConnectNpSuccess else NepalCrimson,
-                            modifier = Modifier.size(20.dp)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (isNepali) "कुनै कारोबार भएको छैन" else "No transactions yet",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (isNepali) "तपाईंको वालेट मौज्दात रु ० छ।" else "Your wallet balance is Rs 0.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+        } else {
+            items(transactions, key = { it.id }) { tx ->
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (tx.isCredit) ConnectNpSuccess.copy(alpha = 0.15f)
+                                    else NepalCrimson.copy(alpha = 0.15f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (tx.isCredit) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                                contentDescription = null,
+                                tint = if (tx.isCredit) ConnectNpSuccess else NepalCrimson,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = tx.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Text(text = "${tx.date} • ${tx.category}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = tx.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(text = "${tx.date} • ${tx.category}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Text(
+                            text = "${if (tx.isCredit) "+ " else "- "}रु ${tx.amountNpr.toInt()}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = if (tx.isCredit) ConnectNpSuccess else MaterialTheme.colorScheme.onSurface
+                        )
                     }
-
-                    Text(
-                        text = "${if (tx.isCredit) "+ " else "- "}रु ${tx.amountNpr.toInt()}",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = if (tx.isCredit) ConnectNpSuccess else MaterialTheme.colorScheme.onSurface
-                    )
                 }
             }
         }
@@ -320,9 +365,12 @@ fun SendMoneyDialog(
     onDismiss: () -> Unit,
     onConfirm: (recipient: String, amount: Double, remarks: String) -> Unit
 ) {
-    var recipient by remember { mutableStateOf("Aayush Sharma") }
-    var amountText by remember { mutableStateOf("1500") }
-    var remarks by remember { mutableStateOf("Trek Gear Share") }
+    var recipient by remember { mutableStateOf("") }
+    var amountText by remember { mutableStateOf("") }
+    var remarks by remember { mutableStateOf("") }
+
+    val parsedAmount = amountText.toDoubleOrNull() ?: 0.0
+    val canSubmit = recipient.isNotBlank() && parsedAmount > 0.0
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -342,6 +390,8 @@ fun SendMoneyDialog(
                     value = recipient,
                     onValueChange = { recipient = it },
                     label = { Text("Recipient Name / Phone / @Handle") },
+                    placeholder = { Text("e.g. 9841000000 or username") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -350,6 +400,8 @@ fun SendMoneyDialog(
                     value = amountText,
                     onValueChange = { amountText = it },
                     label = { Text("Amount (रु NPR)") },
+                    placeholder = { Text("e.g. 500") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -358,15 +410,19 @@ fun SendMoneyDialog(
                     value = remarks,
                     onValueChange = { remarks = it },
                     label = { Text("Remarks") },
+                    placeholder = { Text("e.g. Tea & snacks") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = {
-                        val amt = amountText.toDoubleOrNull() ?: 100.0
-                        onConfirm(recipient, amt, remarks)
+                        if (canSubmit) {
+                            onConfirm(recipient.trim(), parsedAmount, remarks.trim())
+                        }
                     },
+                    enabled = canSubmit,
                     colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                     shape = RoundedCornerShape(10.dp)
@@ -384,8 +440,11 @@ fun TopUpDialog(
     onDismiss: () -> Unit,
     onConfirm: (amount: Double, method: String) -> Unit
 ) {
-    var amountText by remember { mutableStateOf("5000") }
+    var amountText by remember { mutableStateOf("") }
     var selectedMethod by remember { mutableStateOf("eSewa") }
+
+    val parsedAmount = amountText.toDoubleOrNull() ?: 0.0
+    val canSubmit = parsedAmount > 0.0
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -405,6 +464,8 @@ fun TopUpDialog(
                     value = amountText,
                     onValueChange = { amountText = it },
                     label = { Text("Amount (रु NPR)") },
+                    placeholder = { Text("e.g. 1000") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -430,9 +491,11 @@ fun TopUpDialog(
 
                 Button(
                     onClick = {
-                        val amt = amountText.toDoubleOrNull() ?: 1000.0
-                        onConfirm(amt, selectedMethod)
+                        if (canSubmit) {
+                            onConfirm(parsedAmount, selectedMethod)
+                        }
                     },
+                    enabled = canSubmit,
                     colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson),
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                     shape = RoundedCornerShape(10.dp)

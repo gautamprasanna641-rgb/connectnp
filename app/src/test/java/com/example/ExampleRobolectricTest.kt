@@ -100,10 +100,20 @@ class ExampleRobolectricTest {
 
   @Test
   fun `verify wallet transaction`() {
+    ConnectNpRepository.topUpWallet(500.0, "eSewa")
     val currentBalance = ConnectNpRepository.walletBalance.value
     val success = ConnectNpRepository.sendMoney("Aayush Sharma", 100.0, "Test Payment")
     assertTrue(success)
     assertEquals(currentBalance - 100.0, ConnectNpRepository.walletBalance.value, 0.01)
+  }
+
+  @Test
+  fun `verify ImageCompressor handles invalid or empty URI gracefully without crashing`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val nonExistentUri = android.net.Uri.parse("content://media/external/images/media/999999999")
+    val result = com.example.util.ImageCompressor.compressImageUriToBytes(context, nonExistentUri)
+    // Should return null and not throw an uncaught exception
+    org.junit.Assert.assertNull(result)
   }
 }
 

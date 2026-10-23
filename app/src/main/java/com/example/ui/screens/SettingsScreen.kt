@@ -94,7 +94,7 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = if (isNepali) "तपाईंको खाता, सुरक्षा र प्राथमिकताहरू प्रबन्ध गर्नुहोस्" else "Manage your account, preferences, and Google Play compliance",
+                text = if (isNepali) "तपाईंको खाता र एप प्राथमिकताहरू प्रबन्ध गर्नुहोस्" else "Manage your account and app preferences",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -142,7 +142,12 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Signed in with Firebase", fontSize = 11.sp, color = ConnectNpBlue, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (isNepali) "सक्रिय खाता" else "Active Account",
+                                fontSize = 11.sp,
+                                color = ConnectNpBlue,
+                                fontWeight = FontWeight.Bold
+                            )
                             Text(
                                 text = currentDisplayName,
                                 fontSize = 16.sp,
@@ -217,9 +222,9 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Push Notifications (FCM)
+        // Push Notifications
         item {
-            SettingsCategoryHeader(title = if (isNepali) "पुश सूचनाहरू (Push Notifications)" else "Push Notifications (FCM)")
+            SettingsCategoryHeader(title = if (isNepali) "पुश सूचनाहरू (Notifications)" else "Push Notifications")
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -254,9 +259,9 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Blocked Users (Play Store Compliance)
+        // Blocked Users
         item {
-            SettingsCategoryHeader(title = if (isNepali) "अवरुद्ध प्रयोगकर्ताहरू (Blocked Users)" else "Blocked Users (UGC Safety)")
+            SettingsCategoryHeader(title = if (isNepali) "अवरुद्ध प्रयोगकर्ताहरू" else "Blocked Users")
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -315,9 +320,9 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Legal & Google Play Compliance (Privacy Policy)
+        // Legal & Policies (Privacy Policy)
         item {
-            SettingsCategoryHeader(title = if (isNepali) "कानूनी र नीतिहरू" else "Legal & Compliance")
+            SettingsCategoryHeader(title = if (isNepali) "कानूनी र नीतिहरू" else "Legal & Policies")
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -326,8 +331,8 @@ fun SettingsScreen(
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
                     SettingsClickableRow(
                         icon = Icons.Outlined.Policy,
-                        title = "Privacy Policy & Terms of Service",
-                        subtitle = "Google Play Data Safety & Zero-Trust compliance",
+                        title = if (isNepali) "गोपनीयता नीति र सेवा सर्तहरू" else "Privacy Policy & Terms of Service",
+                        subtitle = if (isNepali) "डाटा सुरक्षा र प्रयोगकर्ता गोपनीयता" else "Data safety & privacy protection",
                         onClick = { showPrivacyDialog = true }
                     )
                 }
@@ -403,9 +408,9 @@ fun SettingsScreen(
                 Column {
                     Text(
                         text = if (isNepali)
-                            "यो कार्य पूर्ववत गर्न सकिँदैन। तपाईंको CONNECTNP प्रोफाइल, पोष्टहरू, सन्देशहरू, र वालेट ब्यालेन्स स्थायी रूपमा क्लाउडबाट मेटिनेछ।"
+                            "यो कार्य पूर्ववत गर्न सकिँदैन। तपाईंको CONNECTNP प्रोफाइल, पोष्टहरू, सन्देशहरू, र वालेट ब्यालेन्स स्थायी रूपमा मेटिनेछ।"
                         else
-                            "This action cannot be undone. All your CONNECTNP posts, profile data, wallet records, and credentials will be permanently erased from Firebase and cannot be recovered.",
+                            "This action cannot be undone. All your CONNECTNP posts, profile data, wallet records, and credentials will be permanently erased and cannot be recovered.",
                         fontSize = 13.sp,
                         lineHeight = 18.sp
                     )
@@ -477,11 +482,11 @@ fun SettingsScreen(
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "CONNECTNP respects your privacy and complies with Google Play Developer Program Policies:\n\n" +
-                                "1. Account & Data Deletion: Users can delete their account and associated data anytime.\n" +
-                                "2. UGC Safety: Zero tolerance for objectionable content. Users can report posts and block offending users immediately.\n" +
-                                "3. Secure Authentication: Firebase Authentication (Email/Password) with zero-trust Firestore security rules.\n" +
-                                "4. Data Encryption: Encrypted at rest and in transit via Firebase Cloud Firestore in asia-southeast1.\n\n" +
+                        text = "CONNECTNP is committed to safeguarding your privacy and data security:\n\n" +
+                                "1. Account & Data Privacy: You can update or delete your account and personal data at any time.\n" +
+                                "2. Community Safety: Zero tolerance for harassment or objectionable content. Easily report posts and block offending users.\n" +
+                                "3. Secure Sign-In: Industry-standard authentication protecting your account.\n" +
+                                "4. Encrypted Data: All communications and records are encrypted in transit and at rest.\n\n" +
                                 "Contact: support@connectnp.app",
                         fontSize = 12.sp,
                         lineHeight = 17.sp

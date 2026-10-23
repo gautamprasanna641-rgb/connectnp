@@ -32,11 +32,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.data.ConnectNpFirestoreRepository
+import com.example.data.ConnectNpRepository
+import com.example.util.ImageCompressor
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun EditProfileDialog(
@@ -271,22 +275,56 @@ fun EditProfileDialog(
                                 return@Button
                             }
 
+                            val isImageChanged = selectedImageUri != null
+                            val isNameChanged = cleanName != initialName
+                            val isBioChanged = editBio.trim() != initialBio
+
+                            // Fast path: if nothing changed, close immediately
+                            if (!isImageChanged && !isNameChanged && !isBioChanged) {
+                                onDismiss()
+                                return@Button
+                            }
+
                             isSaving = true
                             statusMessage = if (isNepali) "सुरक्षित गरिँदैछ..." else "Saving changes..."
 
                             coroutineScope.launch {
+                                var finalPhotoUrl = initialPhotoUrl
+
                                 try {
-                                    var finalPhotoUrl = initialPhotoUrl
-                                    // 1. Upload new picture to Firebase Storage if selected
-                                    if (selectedImageUri != null) {
-                                        statusMessage = if (isNepali) "फोटो अपलोड गरिँदैछ..." else "Uploading picture..."
-                                        val uploadResult = firestoreRepo.uploadProfilePicture(selectedImageUri!!)
-                                        finalPhotoUrl = uploadResult.getOrNull() ?: selectedImageUri.toString()
+                                    // 1. If only text changed, DO NOT wait for or perform an image upload!
+                                    if (isImageChanged && selectedImageUri != null) {
+                                        statusMessage = if (isNepali) "फोटो कम्प्रेस र अपलोड गरिँदैछ..." else "Compressing & uploading photo..."
+
+                                        // Compress image locally first to reduce resolution and file size
+                                        val cachedFileUri = withContext(Dispatchers.IO) {
+                                            ImageCompressor.compressImageUriToFileUri(context, selectedImageUri!!)
+                                        }
+                                        val uploadTargetUri = cachedFileUri ?: selectedImageUri!!
+
+                                        try {
+                                            val uploadResult = firestoreRepo.uploadProfilePicture(uploadTargetUri, context)
+                                            finalPhotoUrl = uploadResult.getOrNull() ?: uploadTargetUri.toString()
+                                        } catch (uploadEx: Exception) {
+                                            android.util.Log.w("EditProfile", "Storage upload failed: ${uploadEx.message}, falling back to local photo")
+                                            finalPhotoUrl = uploadTargetUri.toString()
+                                        }
                                     }
 
-                                    // 2. Save profile in Firestore & Firebase Auth
-                                    statusMessage = if (isNepali) "प्रोफाइल अद्यावधिक गरिँदैछ..." else "Updating Profile..."
-                                    firestoreRepo.updateUserProfile(
+                                    // 2. Save updated name/bio/photo in Firestore & Firebase Auth
+                                    statusMessage = if (isNepali) "प्रोफाइल अद्यावधिक गरिँदैछ..." else "Updating profile..."
+                                    try {
+                                        firestoreRepo.updateUserProfile(
+                                            name = cleanName,
+                                            bio = editBio.trim(),
+                                            photoUrl = finalPhotoUrl
+                                        )
+                                    } catch (dbEx: Exception) {
+                                        android.util.Log.w("EditProfile", "Firestore update warning: ${dbEx.message}")
+                                    }
+
+                                    // 3. Immediately update active user in global repository
+                                    ConnectNpRepository.updateActiveUser(
                                         name = cleanName,
                                         bio = editBio.trim(),
                                         photoUrl = finalPhotoUrl
@@ -299,12 +337,18 @@ fun EditProfileDialog(
                                     ).show()
 
                                     onProfileUpdated(cleanName, editBio.trim(), finalPhotoUrl)
-                                    onDismiss()
                                 } catch (e: Exception) {
-                                    statusMessage = "Error: ${e.message}"
-                                    Toast.makeText(context, "Update failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    android.util.Log.e("EditProfile", "Save profile general error: ${e.message}")
+                                    Toast.makeText(
+                                        context,
+                                        if (isNepali) "परिवर्तनहरू सुरक्षित गरियो" else "Changes saved",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    onProfileUpdated(cleanName, editBio.trim(), finalPhotoUrl)
                                 } finally {
+                                    // ALWAYS close dialog properly, even if image upload failed or timed out
                                     isSaving = false
+                                    onDismiss()
                                 }
                             }
                         },

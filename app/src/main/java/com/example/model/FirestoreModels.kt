@@ -77,3 +77,52 @@ data class FirestoreReport(
     val reason: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null
 )
+
+fun FirestorePost.toPost(): Post {
+    val authorUser = User(
+        id = userId,
+        name = authorName.ifBlank { "ConnectNP User" },
+        handle = if (authorHandle.startsWith("@")) authorHandle else if (authorHandle.isNotBlank()) "@$authorHandle" else "@user"
+    )
+    val timeAgoStr = createdAt?.toDate()?.let { date ->
+        val diffMs = System.currentTimeMillis() - date.time
+        val mins = diffMs / (1000 * 60)
+        when {
+            mins < 1 -> "Just now"
+            mins < 60 -> "${mins}m ago"
+            mins < 1440 -> "${mins / 60}h ago"
+            else -> "${mins / 1440}d ago"
+        }
+    } ?: "Just now"
+
+    return Post(
+        id = id,
+        author = authorUser,
+        content = content,
+        locationName = location.ifBlank { null },
+        likesCount = likesCount.toInt(),
+        timestamp = timeAgoStr
+    )
+}
+
+fun FirestoreWalletTransaction.toWalletTransaction(): WalletTransaction {
+    val dateStr = createdAt?.toDate()?.let { date ->
+        val diffMs = System.currentTimeMillis() - date.time
+        val mins = diffMs / (1000 * 60)
+        when {
+            mins < 1 -> "Just now"
+            mins < 60 -> "${mins}m ago"
+            mins < 1440 -> "Today"
+            else -> "${mins / 1440}d ago"
+        }
+    } ?: "Today, Just now"
+
+    return WalletTransaction(
+        id = id,
+        title = title,
+        date = dateStr,
+        amountNpr = amount.toDouble(),
+        isCredit = type == "credit",
+        category = if (type == "credit") "Wallet Top-Up" else "P2P Payment"
+    )
+}

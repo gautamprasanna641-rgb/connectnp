@@ -202,32 +202,87 @@ fun FeedScreen(
         }
 
         // Filtered Posts List (Hiding blocked users and reported posts)
-        items(filteredPosts, key = { it.id }) { post ->
-            PostCardItem(
-                post = post,
-                isNepali = isNepali,
-                isReactionPickerOpen = activeReactionPickerPostId == post.id,
-                onToggleReactionPicker = {
-                    activeReactionPickerPostId = if (activeReactionPickerPostId == post.id) null else post.id
-                },
-                onSelectReaction = { reaction ->
-                    onToggleReaction(post.id, reaction)
-                    activeReactionPickerPostId = null
-                },
-                onVotePoll = { optionId -> onVotePoll(post.id, optionId) },
-                onToggleBookmark = { onToggleBookmark(post.id) },
-                onOpenComments = { activeCommentPostId = post.id },
-                onSharePost = { onSharePost(post.id) },
-                onBlockAuthor = { authorId, authorName, authorHandle ->
-                    ConnectNpRepository.blockUser(authorId, authorName, context, authorHandle)
-                    Toast.makeText(context, "Blocked $authorName", Toast.LENGTH_SHORT).show()
-                },
-                onReportPost = { postId, authorId, reason ->
-                    ConnectNpRepository.reportPost(postId, authorId, reason, context)
-                    Toast.makeText(context, "Report submitted. Thank you for keeping CONNECTNP safe.", Toast.LENGTH_SHORT).show()
+        if (filteredPosts.isEmpty()) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp)
+                        .testTag("feed_empty_state")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DynamicFeed,
+                            contentDescription = null,
+                            tint = ConnectNpBlue,
+                            modifier = Modifier.size(52.dp)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = if (isNepali) "कुनै पोस्ट छैनन्" else "No posts yet",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            fontFamily = com.example.ui.theme.PoppinsFontFamily
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isNepali) "अहिलेसम्म कुनै पोस्ट सिर्जना गरिएको छैन। पहिलो पोस्ट साझा गरेर समुदाय सुरु गर्नुहोस्! 🇳🇵"
+                            else "No posts have been shared yet. Be the first to share an update with the community! 🇳🇵",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Button(
+                            onClick = onCreatePostClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
+                            modifier = Modifier.testTag("empty_feed_create_post_button")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = if (isNepali) "नयाँ पोस्ट सिर्जना गर्नुहोस्" else "Create First Post")
+                        }
+                    }
                 }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            }
+        } else {
+            items(filteredPosts, key = { it.id }) { post ->
+                PostCardItem(
+                    post = post,
+                    isNepali = isNepali,
+                    isReactionPickerOpen = activeReactionPickerPostId == post.id,
+                    onToggleReactionPicker = {
+                        activeReactionPickerPostId = if (activeReactionPickerPostId == post.id) null else post.id
+                    },
+                    onSelectReaction = { reaction ->
+                        onToggleReaction(post.id, reaction)
+                        activeReactionPickerPostId = null
+                    },
+                    onVotePoll = { optionId -> onVotePoll(post.id, optionId) },
+                    onToggleBookmark = { onToggleBookmark(post.id) },
+                    onOpenComments = { activeCommentPostId = post.id },
+                    onSharePost = { onSharePost(post.id) },
+                    onBlockAuthor = { authorId, authorName, authorHandle ->
+                        ConnectNpRepository.blockUser(authorId, authorName, context, authorHandle)
+                        Toast.makeText(context, "Blocked $authorName", Toast.LENGTH_SHORT).show()
+                    },
+                    onReportPost = { postId, authorId, reason ->
+                        ConnectNpRepository.reportPost(postId, authorId, reason, context)
+                        Toast.makeText(context, "Report submitted. Thank you for keeping CONNECTNP safe.", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 
@@ -323,9 +378,9 @@ fun StoriesSection(
                 }
             }
 
-            // Other User Stories
-            items(stories.drop(1).size) { index ->
-                val story = stories[index + 1]
+            // User Stories
+            items(stories.size) { index ->
+                val story = stories[index]
                 Box(
                     modifier = Modifier
                         .width(96.dp)
@@ -339,7 +394,7 @@ fun StoriesSection(
                                 Brush.linearGradient(listOf(ConnectNpBlue, NepalCrimson)),
                             shape = RoundedCornerShape(12.dp)
                         )
-                        .clickable { onStoryClick(index + 1) }
+                        .clickable { onStoryClick(index) }
                         .testTag("story_card_$index")
                 ) {
                     if (story.mediaResId != null) {
@@ -1038,10 +1093,6 @@ fun CommentBottomSheet(
 
     val allComments = remember(firestoreComments, postLocalComments, post.id) {
         val list = mutableListOf<Comment>()
-        if (post.id == "p1" && firestoreComments.isEmpty() && postLocalComments.isEmpty()) {
-            list.add(Comment("c1", SampleDataProvider.aayushUser, "Proud of this movement! Connecting Nepal with world-class tech 🇳🇵", "1h ago", 12, true))
-            list.add(Comment("c2", SampleDataProvider.poojaUser, "Amazing photography and initiative! Looking forward to the meetup.", "45m ago", 8, false))
-        }
         firestoreComments.forEach { fc ->
             list.add(
                 Comment(

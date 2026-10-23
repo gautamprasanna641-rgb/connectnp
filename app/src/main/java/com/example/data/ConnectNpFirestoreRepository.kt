@@ -15,7 +15,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.snapshots
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
+import com.example.util.ImageCompressor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
@@ -159,6 +162,38 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
                     throw error
                 }
         )
+    }
+
+    fun observeAllPosts(): Flow<List<FirestorePost>> = flow {
+        val path = "posts"
+        emitAll(
+            db.collection(path)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(FirestorePost::class.java).sortedByDescending { it.createdAt?.seconds ?: Long.MAX_VALUE }
+                }
+                .catch { error ->
+                    if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                    throw error
+                }
+        )
+    }
+
+    suspend fun updateWalletBalance(newBalance: Long): Result<Unit> {
+        val uid = requireUserId()
+        val path = "users/$uid"
+        return try {
+            db.collection("users").document(uid).update(
+                "walletBalance", newBalance,
+                "updatedAt", FieldValue.serverTimestamp()
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
     }
 
     suspend fun createMarketItem(
@@ -353,13 +388,26 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun uploadProfilePicture(imageUri: Uri): Result<String> {
+    suspend fun uploadProfilePicture(imageUri: Uri, context: Context? = null): Result<String> {
         val uid = requireUserId()
         return try {
             val storageRef = FirebaseStorage.getInstance().reference.child("profile_pictures/$uid.jpg")
-            storageRef.putFile(imageUri).await()
-            val downloadUrl = storageRef.downloadUrl.await().toString()
-            Result.success(downloadUrl)
+            val compressedBytes = context?.let { ImageCompressor.compressImageUriToBytes(it, imageUri) }
+
+            val metadata = StorageMetadata.Builder()
+                .setContentType("image/jpeg")
+                .build()
+
+            // Strict 6-second timeout to prevent UI hangs on slow networks or storage issues
+            withTimeout(6000L) {
+                if (compressedBytes != null && compressedBytes.isNotEmpty()) {
+                    storageRef.putBytes(compressedBytes, metadata).await()
+                } else {
+                    storageRef.putFile(imageUri, metadata).await()
+                }
+                val downloadUrl = storageRef.downloadUrl.await().toString()
+                Result.success(downloadUrl)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
