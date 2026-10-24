@@ -19,6 +19,49 @@ import java.util.UUID
 
 object ConnectNpRepository {
 
+    const val ADMIN_EMAIL = "gautamprasanna641@gmail.com"
+
+    fun isUserAdmin(email: String?): Boolean {
+        return email?.trim()?.equals(ADMIN_EMAIL, ignoreCase = true) == true
+    }
+
+    private val _verifiedUserIds = MutableStateFlow<Set<String>>(setOf("user_ai"))
+    val verifiedUserIds: StateFlow<Set<String>> = _verifiedUserIds.asStateFlow()
+
+    fun setVerifiedUserIds(ids: Set<String>) {
+        _verifiedUserIds.value = _verifiedUserIds.value + ids
+    }
+
+    fun isUserVerified(userId: String): Boolean {
+        return userId in _verifiedUserIds.value
+    }
+
+    fun toggleUserVerification(userId: String, isVerified: Boolean, context: Context? = null) {
+        if (isVerified) {
+            _verifiedUserIds.value = _verifiedUserIds.value + userId
+        } else {
+            _verifiedUserIds.value = _verifiedUserIds.value - userId
+        }
+        _posts.value = _posts.value.map { post ->
+            if (post.author.id == userId) {
+                post.copy(author = post.author.copy(isVerified = isVerified))
+            } else post
+        }
+        if (_currentActiveUser.value.id == userId) {
+            _currentActiveUser.value = _currentActiveUser.value.copy(isVerified = isVerified)
+        }
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val firestoreRepo = ConnectNpFirestoreRepository(context)
+                    firestoreRepo.setUserVerification(userId, isVerified)
+                } catch (e: Exception) {
+                    // Handled gracefully
+                }
+            }
+        }
+    }
+
     private val _blockedUserIds = MutableStateFlow<Set<String>>(emptySet())
     val blockedUserIds: StateFlow<Set<String>> = _blockedUserIds.asStateFlow()
 
@@ -311,6 +354,42 @@ object ConnectNpRepository {
             if (post.id == postId) {
                 post.copy(commentsCount = post.commentsCount + 1)
             } else post
+        }
+    }
+
+    fun deletePost(postId: String, context: Context? = null) {
+        _posts.value = _posts.value.filter { it.id != postId }
+        _commentsByPost.value = _commentsByPost.value - postId
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val firestoreRepo = ConnectNpFirestoreRepository(context)
+                    firestoreRepo.deletePost(postId)
+                } catch (e: Exception) {
+                    // Handled gracefully
+                }
+            }
+        }
+    }
+
+    fun deleteComment(postId: String, commentId: String, context: Context? = null) {
+        val currentComments = _commentsByPost.value[postId] ?: emptyList()
+        val updated = currentComments.filter { it.id != commentId }
+        _commentsByPost.value = _commentsByPost.value + (postId to updated)
+        _posts.value = _posts.value.map { post ->
+            if (post.id == postId) {
+                post.copy(commentsCount = maxOf(0, post.commentsCount - 1))
+            } else post
+        }
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val firestoreRepo = ConnectNpFirestoreRepository(context)
+                    firestoreRepo.deleteComment(postId, commentId)
+                } catch (e: Exception) {
+                    // Handled gracefully
+                }
+            }
         }
     }
 

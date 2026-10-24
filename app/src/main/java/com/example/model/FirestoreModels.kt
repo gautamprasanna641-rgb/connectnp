@@ -12,6 +12,7 @@ data class FirestoreUserProfile(
     val handle: String = "",
     val bio: String = "",
     val photoUrl: String = "",
+    val isVerified: Boolean = false,
     val walletBalance: Long = 0L,
     val blockedUsers: List<String> = emptyList(),
     val fcmToken: String = "",
@@ -82,7 +83,8 @@ fun FirestorePost.toPost(): Post {
     val authorUser = User(
         id = userId,
         name = authorName.ifBlank { "ConnectNP User" },
-        handle = if (authorHandle.startsWith("@")) authorHandle else if (authorHandle.isNotBlank()) "@$authorHandle" else "@user"
+        handle = if (authorHandle.startsWith("@")) authorHandle else if (authorHandle.isNotBlank()) "@$authorHandle" else "@user",
+        isVerified = com.example.data.ConnectNpRepository.isUserVerified(userId)
     )
     val timeAgoStr = createdAt?.toDate()?.let { date ->
         val diffMs = System.currentTimeMillis() - date.time

@@ -10,6 +10,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'gautamprasanna641@gmail.com';
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -28,6 +32,7 @@ service cloud.firestore {
              data.handle is string && data.handle.size() >= 1 && data.handle.size() <= 50 &&
              (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
              (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2000)) &&
+             (!('isVerified' in data) || (data.isVerified is bool)) &&
              (!('walletBalance' in data) || (data.walletBalance is int && data.walletBalance >= 0)) &&
              (!('blockedUsers' in data) || (data.blockedUsers is list)) &&
              (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 500)) &&
@@ -78,17 +83,18 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'name', 'handle', 'createdAt']) &&
-                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'photoUrl', 'walletBalance', 'blockedUsers', 'fcmToken', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'photoUrl', 'isVerified', 'walletBalance', 'blockedUsers', 'fcmToken', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        isValidUserProfile(incoming());
       allow update: if isSignedIn() &&
                        isValidId(userId) &&
-                       request.auth.uid == userId &&
-                       incoming().userId == existing().userId &&
-                       incoming().createdAt == existing().createdAt &&
-                       isValidUserProfile(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'photoUrl', 'walletBalance', 'blockedUsers', 'fcmToken', 'updatedAt']);
+                       ((request.auth.uid == userId &&
+                        incoming().userId == existing().userId &&
+                        incoming().createdAt == existing().createdAt &&
+                        isValidUserProfile(incoming()) &&
+                        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'photoUrl', 'isVerified', 'walletBalance', 'blockedUsers', 'fcmToken', 'updatedAt'])) ||
+                       (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'updatedAt'])));
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
 
       match /transactions/{transactionId} {
@@ -126,7 +132,7 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        isValidPost(incoming()) &&
                        incoming().diff(existing()).affectedKeys().hasOnly(['content', 'location', 'likesCount', 'commentsCount', 'sharesCount', 'updatedAt']);
-      allow delete: if isSignedIn() && isValidId(postId) && existing().userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(postId) && (existing().userId == request.auth.uid || isAdmin());
 
       match /comments/{commentId} {
         allow get, list: if isSignedIn() && isValidId(postId) && isValidId(commentId);
@@ -138,7 +144,7 @@ service cloud.firestore {
                          incoming().keys().hasOnly(['id', 'postId', 'userId', 'authorName', 'authorHandle', 'authorAvatarUrl', 'text', 'createdAt']) &&
                          incoming().createdAt is timestamp &&
                          incoming().createdAt <= request.time;
-        allow update, delete: if isSignedIn() && existing().userId == request.auth.uid;
+        allow update, delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
       }
     }
 

@@ -149,5 +149,77 @@ class ExampleRobolectricTest {
     val updatedMessages = ConnectNpRepository.messagesByThread.value["chat_ai"] ?: emptyList()
     assertTrue("Messages should include the sent message", updatedMessages.any { it.text == "Where can I eat momo in Kathmandu?" })
   }
+
+  @Test
+  fun `verify admin authorization strictly restricted to owner email`() {
+    val ownerEmail = "gautamprasanna641@gmail.com"
+    val ownerEmailUppercase = "GAUTAMPRASANNA641@GMAIL.COM"
+    val normalUserEmail = "regular_user@example.com"
+
+    assertTrue("Owner email must be recognized as admin", ConnectNpRepository.isUserAdmin(ownerEmail))
+    assertTrue("Owner email case-insensitive match", ConnectNpRepository.isUserAdmin(ownerEmailUppercase))
+    org.junit.Assert.assertFalse("Regular user must NOT be admin", ConnectNpRepository.isUserAdmin(normalUserEmail))
+    org.junit.Assert.assertFalse("Null email must NOT be admin", ConnectNpRepository.isUserAdmin(null))
+    org.junit.Assert.assertFalse("Empty email must NOT be admin", ConnectNpRepository.isUserAdmin(""))
+  }
+
+  @Test
+  fun `verify admin can grant and revoke user verified blue tick badge`() {
+    val testUserId = "target_user_42"
+    val testAuthor = com.example.model.User(
+      id = testUserId,
+      name = "Subash Karki",
+      handle = "@subash",
+      isVerified = false
+    )
+
+    // Add post with unverified user
+    ConnectNpRepository.addPost(
+      content = "Exploring Pokhara lakeside!",
+      location = "Pokhara",
+      customAuthor = testAuthor
+    )
+
+    val postBefore = ConnectNpRepository.posts.value.first { it.author.id == testUserId }
+    org.junit.Assert.assertFalse("User should start unverified", postBefore.author.isVerified)
+
+    // Admin grants Blue Tick
+    ConnectNpRepository.toggleUserVerification(testUserId, true)
+    assertTrue("isUserVerified should be true", ConnectNpRepository.isUserVerified(testUserId))
+    val postAfterGrant = ConnectNpRepository.posts.value.first { it.author.id == testUserId }
+    assertTrue("Post author should reflect verified Blue Tick badge", postAfterGrant.author.isVerified)
+
+    // Admin revokes Blue Tick
+    ConnectNpRepository.toggleUserVerification(testUserId, false)
+    org.junit.Assert.assertFalse("isUserVerified should be false", ConnectNpRepository.isUserVerified(testUserId))
+    val postAfterRevoke = ConnectNpRepository.posts.value.first { it.author.id == testUserId }
+    org.junit.Assert.assertFalse("Post author should reflect revoked badge", postAfterRevoke.author.isVerified)
+  }
+
+  @Test
+  fun `verify admin can delete any post and comment`() {
+    // Create a test post
+    ConnectNpRepository.addPost("Post to be moderated by admin", "Kathmandu")
+    val createdPost = ConnectNpRepository.posts.value.first()
+    val postId = createdPost.id
+
+    // Add a comment to that post
+    ConnectNpRepository.addComment(postId, "Comment to be moderated by admin")
+    val comments = ConnectNpRepository.getCommentsForPost(postId)
+    assertEquals(1, comments.size)
+    val commentId = comments.first().id
+
+    // Admin deletes comment
+    ConnectNpRepository.deleteComment(postId, commentId)
+    val commentsAfterDelete = ConnectNpRepository.getCommentsForPost(postId)
+    assertTrue("Comment should be deleted", commentsAfterDelete.isEmpty())
+
+    // Admin deletes post
+    ConnectNpRepository.deletePost(postId)
+    org.junit.Assert.assertFalse(
+      "Post should be permanently removed from repository",
+      ConnectNpRepository.posts.value.any { it.id == postId }
+    )
+  }
 }
 

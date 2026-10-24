@@ -527,4 +527,66 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
                 }
         )
     }
+
+    suspend fun deletePost(postId: String): Result<Unit> {
+        val path = "posts/$postId"
+        return try {
+            db.collection("posts").document(postId).delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteComment(postId: String, commentId: String): Result<Unit> {
+        val path = "posts/$postId/comments/$commentId"
+        return try {
+            db.collection("posts").document(postId).collection("comments").document(commentId).delete().await()
+            try {
+                db.collection("posts").document(postId).update(
+                    "commentsCount", FieldValue.increment(-1),
+                    "updatedAt", FieldValue.serverTimestamp()
+                ).await()
+            } catch (_: Exception) {}
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun setUserVerification(userId: String, isVerified: Boolean): Result<Unit> {
+        val path = "users/$userId"
+        return try {
+            db.collection("users").document(userId).update(
+                "isVerified", isVerified,
+                "updatedAt", FieldValue.serverTimestamp()
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getAllUsers(): Result<List<FirestoreUserProfile>> {
+        val path = "users"
+        return try {
+            val snapshot = db.collection(path).get().await()
+            val users = snapshot.toObjects(FirestoreUserProfile::class.java)
+            Result.success(users)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.LIST, path)
+            Result.failure(e)
+        }
+    }
 }
