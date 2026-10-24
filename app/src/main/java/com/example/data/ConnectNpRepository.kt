@@ -3,6 +3,7 @@ package com.example.data
 import android.content.Context
 import com.example.R
 import com.example.model.*
+import com.example.service.ConnectNpAiService
 import com.example.service.ConnectNpMessagingService
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseUser
@@ -39,10 +40,22 @@ object ConnectNpRepository {
     private val _reels = MutableStateFlow<List<Reel>>(emptyList())
     val reels: StateFlow<List<Reel>> = _reels.asStateFlow()
 
-    private val _chatThreads = MutableStateFlow<List<ChatThread>>(emptyList())
+    private val _chatThreads = MutableStateFlow<List<ChatThread>>(SampleDataProvider.getInitialChatThreads())
     val chatThreads: StateFlow<List<ChatThread>> = _chatThreads.asStateFlow()
 
-    private val _messagesByThread = MutableStateFlow<Map<String, List<ChatMessage>>>(emptyMap())
+    private val _messagesByThread = MutableStateFlow<Map<String, List<ChatMessage>>>(
+        mapOf(
+            "chat_ai" to listOf(
+                ChatMessage(
+                    id = "ai_welcome",
+                    senderId = SampleDataProvider.aiBotUser.id,
+                    text = "नमस्ते! I'm your ConnectNP AI Assistant. How can I assist you with your travels, community questions, or ConnectNP services today? 🇳🇵✨",
+                    timestamp = "Just now",
+                    isFromMe = false
+                )
+            )
+        )
+    )
     val messagesByThread: StateFlow<Map<String, List<ChatMessage>>> = _messagesByThread.asStateFlow()
 
     private val _marketItems = MutableStateFlow<List<MarketItem>>(emptyList())
@@ -370,8 +383,9 @@ object ConnectNpRepository {
         )
 
         val currentList = _messagesByThread.value[threadId] ?: emptyList()
+        val updatedThreadMessages = currentList + userMsg
         val updatedMap = _messagesByThread.value.toMutableMap()
-        updatedMap[threadId] = currentList + userMsg
+        updatedMap[threadId] = updatedThreadMessages
         _messagesByThread.value = updatedMap
 
         // Update chat thread preview
@@ -386,7 +400,7 @@ object ConnectNpRepository {
 
         // Response generator with local notification
         if (threadId == "chat_ai") {
-            generateAiResponse(text, context)
+            generateAiResponse(updatedThreadMessages, text, context)
         } else {
             simulatePeerResponse(threadId, context)
         }
@@ -428,50 +442,47 @@ object ConnectNpRepository {
         }
     }
 
-    private fun generateAiResponse(userPrompt: String, context: Context? = null) {
-        val lower = userPrompt.lowercase()
-        val reply = when {
-            lower.contains("momo") || lower.contains("food") ->
-                "🥟 Kathmandu Momo Guide: For the crispiest C-Momo, head to Thamel or Patan! For traditional Buff Jhol Momo with spicy sesame achar, local stalls near New Road & Bagbazar are legendary!"
-            lower.contains("trek") || lower.contains("himalaya") || lower.contains("everest") ->
-                "🏔️ Best trekking seasons in Nepal are Autumn (Oct-Nov) and Spring (March-May). Annapurna Circuit, Langtang, and Everest Base Camp offer clear skies and stunning mountain vistas!"
-            lower.contains("pay") || lower.contains("wallet") || lower.contains("esewa") || lower.contains("khalti") ->
-                "💳 ConnectNP Pay supports instant zero-fee P2P transfers, QR merchant scans, and seamless integration with eSewa & Khalti wallets for marketplace escrow protection!"
-            lower.contains("nepali") || lower.contains("नमस्ते") ->
-                "नमस्ते! ConnectNP ले नेपाल र संसारभरका नेपालीहरूलाई एकै ठाउँमा जोड्ने काम गर्छ। तपाईं यहाँ साथीहरूसँग कुराकानी गर्न, रिल्स हेर्न, र सामान किनबेच गर्न सक्नुहुन्छ।"
-            else ->
-                "Namaste! ConnectNP AI here. I can assist you with sharing posts, exploring Marketplace listings, sending funds with ConnectNP Pay, or discovering trending Reels across Nepal! 🇳🇵✨"
-        }
+    private fun generateAiResponse(
+        history: List<ChatMessage>,
+        userPrompt: String,
+        context: Context? = null
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            // Generates contextual response maintaining all prior conversation turns
+            val reply = ConnectNpAiService.getAiResponseWithHistory(history, userPrompt)
 
-        CoroutineScope(Dispatchers.Main).launch {
-            kotlinx.coroutines.delay(1000)
-            val aiMsg = ChatMessage(
-                id = "ai_${System.currentTimeMillis()}",
-                senderId = SampleDataProvider.aiBotUser.id,
-                text = reply,
-                timestamp = "Just now",
-                isFromMe = false
-            )
-
-            val currentList = _messagesByThread.value["chat_ai"] ?: emptyList()
-            val updatedMap = _messagesByThread.value.toMutableMap()
-            updatedMap["chat_ai"] = currentList + aiMsg
-            _messagesByThread.value = updatedMap
-
-            _chatThreads.value = _chatThreads.value.map { thread ->
-                if (thread.id == "chat_ai") {
-                    thread.copy(lastMessage = reply.take(60) + "...", lastMessageTime = "Just now")
-                } else thread
-            }
-
-            if (context != null) {
-                incrementUnreadNotifications()
-                ConnectNpMessagingService.showLocalNotification(
-                    context = context,
-                    title = "ConnectNP Assistant 🤖",
-                    body = reply,
-                    type = "chat"
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                val aiMsg = ChatMessage(
+                    id = "ai_${System.currentTimeMillis()}",
+                    senderId = SampleDataProvider.aiBotUser.id,
+                    text = reply,
+                    timestamp = "Just now",
+                    isFromMe = false
                 )
+
+                val currentList = _messagesByThread.value["chat_ai"] ?: emptyList()
+                val updatedMap = _messagesByThread.value.toMutableMap()
+                updatedMap["chat_ai"] = currentList + aiMsg
+                _messagesByThread.value = updatedMap
+
+                _chatThreads.value = _chatThreads.value.map { thread ->
+                    if (thread.id == "chat_ai") {
+                        thread.copy(
+                            lastMessage = if (reply.length > 60) reply.take(60) + "..." else reply,
+                            lastMessageTime = "Just now"
+                        )
+                    } else thread
+                }
+
+                if (context != null) {
+                    incrementUnreadNotifications()
+                    ConnectNpMessagingService.showLocalNotification(
+                        context = context,
+                        title = "ConnectNP Assistant 🤖",
+                        body = reply,
+                        type = "chat"
+                    )
+                }
             }
         }
     }

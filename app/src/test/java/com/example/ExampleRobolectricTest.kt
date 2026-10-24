@@ -115,5 +115,39 @@ class ExampleRobolectricTest {
     // Should return null and not throw an uncaught exception
     org.junit.Assert.assertNull(result)
   }
+
+  @Test
+  fun `verify ConnectNpAiService preserves conversation history across turns`() {
+    // Turn 1: User asks about Momo food
+    val msg1 = com.example.model.ChatMessage(id = "1", senderId = "me", text = "Tell me about Momo", isFromMe = true, timestamp = "1m")
+    val historyTurn1 = listOf(msg1)
+
+    // Turn 2: User asks "How much does it cost?" without explicitly repeating momo
+    val response = com.example.service.ConnectNpAiService.generateContextAwareFallback(historyTurn1, "How much does it cost?")
+    assertTrue("AI should recognize food/momo context from history", response.contains("Momo") || response.contains("NPR") || response.contains("रु"))
+
+    // Trekking conversation history test
+    val msgTrek = com.example.model.ChatMessage(id = "2", senderId = "me", text = "I want to do Annapurna trek", isFromMe = true, timestamp = "2m")
+    val historyTrek = listOf(msgTrek)
+    val responseTrekCost = com.example.service.ConnectNpAiService.generateContextAwareFallback(historyTrek, "what is the price?")
+    assertTrue("AI should recognize trekking context from history for cost", responseTrekCost.contains("trekking") || responseTrekCost.contains("Permit") || responseTrekCost.contains("ACAP"))
+
+    val responseTrekDuration = com.example.service.ConnectNpAiService.generateContextAwareFallback(historyTrek, "how long does it take?")
+    assertTrue("AI should recognize trekking duration context", responseTrekDuration.contains("trek") || responseTrekDuration.contains("days"))
+  }
+
+  @Test
+  fun `verify chat repository has AI assistant thread and tracks messages`() {
+    val aiThread = ConnectNpRepository.chatThreads.value.find { it.id == "chat_ai" }
+    assertTrue("chat_ai thread should exist", aiThread != null)
+    assertTrue("chat_ai should be marked as AI assistant", aiThread?.isAiAssistant == true)
+
+    val initialMessages = ConnectNpRepository.messagesByThread.value["chat_ai"] ?: emptyList()
+    assertTrue("chat_ai should have initial welcome message", initialMessages.isNotEmpty())
+
+    ConnectNpRepository.sendMessage("chat_ai", "Where can I eat momo in Kathmandu?")
+    val updatedMessages = ConnectNpRepository.messagesByThread.value["chat_ai"] ?: emptyList()
+    assertTrue("Messages should include the sent message", updatedMessages.any { it.text == "Where can I eat momo in Kathmandu?" })
+  }
 }
 

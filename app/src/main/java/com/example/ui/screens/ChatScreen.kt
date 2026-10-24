@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -288,6 +289,14 @@ fun ActiveChatView(
     onStartCall: (isVideo: Boolean) -> Unit
 ) {
     var inputText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    // Automatically scroll to latest message when user sends or AI responds
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -314,14 +323,28 @@ fun ActiveChatView(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
-                        .background(ConnectNpBlue),
+                        .background(
+                            if (thread.isAiAssistant)
+                                Brush.linearGradient(listOf(ConnectNpBlue, NepalCrimson))
+                            else
+                                Brush.linearGradient(listOf(ConnectNpBlue, ConnectNpBlue))
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = thread.user.name.take(1),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (thread.isAiAssistant) {
+                        Icon(
+                            imageVector = Icons.Default.SmartToy,
+                            contentDescription = "AI",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    } else {
+                        Text(
+                            text = thread.user.name.take(1),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -333,20 +356,23 @@ fun ActiveChatView(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (thread.isOnline) "Online • End-to-End Encrypted" else "Last seen recently",
+                        text = if (thread.isAiAssistant) "AI Companion • Always Active" else if (thread.isOnline) "Online • End-to-End Encrypted" else "Last seen recently",
                         fontSize = 11.sp,
-                        color = if (thread.isOnline) ConnectNpSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (thread.isOnline || thread.isAiAssistant) ConnectNpSuccess else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                // Audio Call
-                IconButton(onClick = { onStartCall(false) }) {
-                    Icon(imageVector = Icons.Default.Call, contentDescription = "Call", tint = ConnectNpBlue)
-                }
+                // Call buttons for peer chats only (not AI bot)
+                if (!thread.isAiAssistant) {
+                    // Audio Call
+                    IconButton(onClick = { onStartCall(false) }) {
+                        Icon(imageVector = Icons.Default.Call, contentDescription = "Call", tint = ConnectNpBlue)
+                    }
 
-                // Video Call
-                IconButton(onClick = { onStartCall(true) }) {
-                    Icon(imageVector = Icons.Default.Videocam, contentDescription = "Video", tint = ConnectNpBlue)
+                    // Video Call
+                    IconButton(onClick = { onStartCall(true) }) {
+                        Icon(imageVector = Icons.Default.Videocam, contentDescription = "Video", tint = ConnectNpBlue)
+                    }
                 }
             }
         }
@@ -374,7 +400,7 @@ fun ActiveChatView(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "🔒 Messages are end-to-end encrypted on ConnectNP.",
+                        text = if (thread.isAiAssistant) "🤖 AI conversation with multi-turn contextual memory" else "🔒 Messages are end-to-end encrypted on ConnectNP.",
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -405,8 +431,9 @@ fun ActiveChatView(
             }
         }
 
-        // Messages List
+        // Messages List with state for auto-scroll
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -439,7 +466,9 @@ fun ActiveChatView(
                     onValueChange = { inputText = it },
                     placeholder = { Text(if (isNepali) "सन्देश टाइप गर्नुहोस्..." else "Message...") },
                     shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("chat_input_field"),
                     maxLines = 4
                 )
 
