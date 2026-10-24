@@ -41,6 +41,9 @@ data class FirestorePost(
     val content: String = "",
     val location: String = "",
     val likesCount: Long = 0L,
+    val commentsCount: Long = 0L,
+    val isPagePost: Boolean = false,
+    val pageId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -79,13 +82,60 @@ data class FirestoreReport(
     @ServerTimestamp val createdAt: Timestamp? = null
 )
 
-fun FirestorePost.toPost(): Post {
-    val authorUser = User(
-        id = userId,
-        name = authorName.ifBlank { "ConnectNP User" },
-        handle = if (authorHandle.startsWith("@")) authorHandle else if (authorHandle.isNotBlank()) "@$authorHandle" else "@user",
-        isVerified = com.example.data.ConnectNpRepository.isUserVerified(userId)
+@IgnoreExtraProperties
+data class FirestorePage(
+    val id: String = "official_connectnp",
+    val pageName: String = "CONNECTNP Official",
+    val handle: String = "@connectnp_official",
+    val bio: String = "Official page of ConnectNP - Nepal's Premier Social, Community & Payments Super-App 🇳🇵",
+    val profilePhoto: String = "",
+    val coverPhoto: String = "",
+    val category: String = "Official Organization",
+    val website: String = "https://connectnp.app",
+    val followersCount: Long = 1250L,
+    val isVerified: Boolean = true,
+    val ownerEmail: String = "gautamprasanna641@gmail.com",
+    val ownerId: String = "",
+    val followers: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+fun FirestorePage.toOfficialPage(currentUserId: String = ""): OfficialPage {
+    return OfficialPage(
+        id = id,
+        pageName = pageName,
+        handle = handle,
+        bio = bio,
+        profilePhoto = profilePhoto.ifBlank { null },
+        coverPhoto = coverPhoto.ifBlank { null },
+        category = category,
+        website = website,
+        followersCount = followersCount,
+        isVerified = isVerified,
+        ownerEmail = ownerEmail,
+        ownerId = ownerId,
+        isFollowing = if (currentUserId.isNotBlank()) currentUserId in followers else com.example.data.ConnectNpRepository.isPageFollowed(id)
     )
+}
+
+fun FirestorePost.toPost(): Post {
+    val isOfficialPage = isPagePost || pageId == "official_connectnp"
+    val authorUser = if (isOfficialPage) {
+        User(
+            id = "official_connectnp",
+            name = authorName.ifBlank { "CONNECTNP Official" },
+            handle = if (authorHandle.startsWith("@")) authorHandle else "@connectnp_official",
+            isVerified = true
+        )
+    } else {
+        User(
+            id = userId,
+            name = authorName.ifBlank { "ConnectNP User" },
+            handle = if (authorHandle.startsWith("@")) authorHandle else if (authorHandle.isNotBlank()) "@$authorHandle" else "@user",
+            isVerified = com.example.data.ConnectNpRepository.isUserVerified(userId)
+        )
+    }
     val timeAgoStr = createdAt?.toDate()?.let { date ->
         val diffMs = System.currentTimeMillis() - date.time
         val mins = diffMs / (1000 * 60)
@@ -103,7 +153,10 @@ fun FirestorePost.toPost(): Post {
         content = content,
         locationName = location.ifBlank { null },
         likesCount = likesCount.toInt(),
-        timestamp = timeAgoStr
+        commentsCount = commentsCount.toInt(),
+        timestamp = timeAgoStr,
+        isPagePost = isOfficialPage,
+        pageId = if (isOfficialPage) "official_connectnp" else pageId.ifBlank { null }
     )
 }
 

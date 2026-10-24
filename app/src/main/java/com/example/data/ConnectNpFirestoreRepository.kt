@@ -5,6 +5,7 @@ import android.net.Uri
 import com.example.R
 import com.example.model.FirestoreComment
 import com.example.model.FirestoreMarketItem
+import com.example.model.FirestorePage
 import com.example.model.FirestorePost
 import com.example.model.FirestoreUserProfile
 import com.example.model.FirestoreWalletTransaction
@@ -586,6 +587,114 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.LIST, path)
+            Result.failure(e)
+        }
+    }
+
+    fun observeOfficialPage(pageId: String = "official_connectnp"): Flow<FirestorePage?> = flow {
+        val path = "pages/$pageId"
+        emitAll(
+            db.collection("pages").document(pageId)
+                .snapshots()
+                .map { snapshot ->
+                    if (snapshot.exists()) {
+                        snapshot.toObject(FirestorePage::class.java)
+                    } else {
+                        null
+                    }
+                }
+                .catch { error ->
+                    if (error is Exception) handleFirestoreError(error, OperationType.GET, path)
+                    throw error
+                }
+        )
+    }
+
+    suspend fun saveOfficialPage(page: com.example.model.OfficialPage): Result<Unit> {
+        val uid = requireUserId()
+        val path = "pages/${page.id}"
+        return try {
+            val payload = hashMapOf<String, Any>(
+                "id" to page.id,
+                "pageName" to page.pageName,
+                "handle" to page.handle,
+                "bio" to page.bio,
+                "category" to page.category,
+                "website" to page.website,
+                "followersCount" to page.followersCount,
+                "isVerified" to page.isVerified,
+                "ownerEmail" to page.ownerEmail,
+                "ownerId" to uid,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("pages").document(page.id).set(payload, com.google.firebase.firestore.SetOptions.merge()).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun setPageFollowStatus(pageId: String, isFollowing: Boolean): Result<Unit> {
+        val uid = requireUserId()
+        val path = "pages/$pageId"
+        return try {
+            val docRef = db.collection("pages").document(pageId)
+            val updatePayload = if (isFollowing) {
+                mapOf(
+                    "followers" to FieldValue.arrayUnion(uid),
+                    "followersCount" to FieldValue.increment(1)
+                )
+            } else {
+                mapOf(
+                    "followers" to FieldValue.arrayRemove(uid),
+                    "followersCount" to FieldValue.increment(-1)
+                )
+            }
+            docRef.update(updatePayload).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createPagePost(
+        content: String,
+        location: String = "Kathmandu, Nepal",
+        pageName: String = "CONNECTNP Official",
+        pageHandle: String = "@connectnp_official",
+        pageId: String = "official_connectnp"
+    ): Result<String> {
+        val uid = requireUserId()
+        val path = "posts"
+        val colRef = db.collection(path)
+        val docRef = colRef.document()
+        return try {
+            val payload = hashMapOf<String, Any>(
+                "id" to docRef.id,
+                "userId" to uid,
+                "authorName" to pageName,
+                "authorHandle" to pageHandle,
+                "content" to content,
+                "location" to location,
+                "likesCount" to 0L,
+                "commentsCount" to 0L,
+                "isPagePost" to true,
+                "pageId" to pageId,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            docRef.set(payload).await()
+            Result.success(docRef.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, path)
             Result.failure(e)
         }
     }

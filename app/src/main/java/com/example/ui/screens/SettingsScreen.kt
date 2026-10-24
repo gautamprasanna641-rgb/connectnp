@@ -71,8 +71,14 @@ fun SettingsScreen(
     var isDeleting by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showAdminPanel by remember { mutableStateOf(false) }
+    var showOfficialPage by remember { mutableStateOf(false) }
 
     val isAdmin = ConnectNpRepository.isUserAdmin(currentUser?.email)
+
+    if (showOfficialPage) {
+        OfficialPageScreen(onBack = { showOfficialPage = false })
+        return
+    }
 
     if (showAdminPanel) {
         AdminPanelScreen(onBack = { showAdminPanel = false })
@@ -274,6 +280,24 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { showOfficialPage = true },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ConnectNpBlue),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, ConnectNpBlue),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("manage_official_page_button")
+                        ) {
+                            Icon(Icons.Default.Verified, contentDescription = null, modifier = Modifier.size(16.dp), tint = ConnectNpBlue)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isNepali) "आधिकारिक पृष्ठ व्यवस्थापन (CONNECTNP Official)" else "Official Page Manager (CONNECTNP)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -404,6 +428,67 @@ fun SettingsScreen(
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         }
                     }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Official CONNECTNP Page (Available for all users to view and follow)
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "आधिकारिक समुदाय" else "Official Community")
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showOfficialPage = true }
+                    .testTag("view_official_page_row")
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(ConnectNpBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Campaign,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "CONNECTNP Official Page",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "Verified",
+                                tint = ConnectNpBlue,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        Text(
+                            text = if (isNepali) "आधिकारिक घोषणाहरू र नयाँ सुविधाहरू हेर्नुहोस्" else "Follow for official updates, new features & announcements",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Open",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))

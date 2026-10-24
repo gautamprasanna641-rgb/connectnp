@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.ConnectNpRepository
 import com.example.model.MessageMediaType
 import com.example.model.User
+import com.example.model.toOfficialPage
 import com.example.model.toPost
 import com.example.model.toWalletTransaction
 import com.example.ui.components.*
@@ -142,6 +143,16 @@ fun ConnectNpMainApp(
     LaunchedEffect(firestoreRepo) {
         firestoreRepo.observeTransactions().collect { fsTransactions ->
             ConnectNpRepository.setTransactions(fsTransactions.map { it.toWalletTransaction() })
+        }
+    }
+
+    // Real-time Firestore sync for Official Page
+    LaunchedEffect(firestoreRepo) {
+        firestoreRepo.observeOfficialPage().collect { fsPage ->
+            if (fsPage != null) {
+                val currentUid = Firebase.auth.currentUser?.uid ?: ""
+                ConnectNpRepository.setOfficialPage(fsPage.toOfficialPage(currentUid))
+            }
         }
     }
 

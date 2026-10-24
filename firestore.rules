@@ -50,6 +50,8 @@ service cloud.firestore {
              (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
              (!('commentsCount' in data) || (data.commentsCount is int && data.commentsCount >= 0)) &&
              (!('sharesCount' in data) || (data.sharesCount is int && data.sharesCount >= 0)) &&
+             (!('isPagePost' in data) || (data.isPagePost is bool)) &&
+             (!('pageId' in data) || (data.pageId is string && data.pageId.size() <= 128)) &&
              (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
              (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
     }
@@ -120,8 +122,9 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
                        isValidId(postId) &&
                        incoming().userId == request.auth.uid &&
+                       (!('isPagePost' in incoming()) || incoming().isPagePost == false || isAdmin()) &&
                        incoming().keys().hasAll(['userId', 'authorName', 'authorHandle', 'content', 'createdAt']) &&
-                       incoming().keys().hasOnly(['id', 'userId', 'authorName', 'authorHandle', 'content', 'location', 'likesCount', 'commentsCount', 'sharesCount', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['id', 'userId', 'authorName', 'authorHandle', 'content', 'location', 'likesCount', 'commentsCount', 'sharesCount', 'isPagePost', 'pageId', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        isValidPost(incoming());
@@ -146,6 +149,12 @@ service cloud.firestore {
                          incoming().createdAt <= request.time;
         allow update, delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
       }
+    }
+
+    match /pages/{pageId} {
+      allow get, list: if isSignedIn() && isValidId(pageId);
+      allow create, delete: if isAdmin() && isValidId(pageId);
+      allow update: if isSignedIn() && isValidId(pageId) && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['followers', 'followersCount']));
     }
 
     match /market_items/{itemId} {

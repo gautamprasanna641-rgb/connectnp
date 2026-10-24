@@ -62,6 +62,153 @@ object ConnectNpRepository {
         }
     }
 
+    // --- Official CONNECTNP Page State ---
+    val officialPageUser = User(
+        id = "official_connectnp",
+        name = "CONNECTNP Official",
+        handle = "@connectnp_official",
+        avatarResId = R.drawable.connectnp_icon_full,
+        isVerified = true,
+        isCreator = true,
+        bio = "Official page of ConnectNP - Nepal's Premier Social, Community & Payments Super-App 🇳🇵",
+        location = "Kathmandu, Nepal"
+    )
+
+    private val _officialPage = MutableStateFlow(
+        OfficialPage(
+            id = "official_connectnp",
+            pageName = "CONNECTNP Official",
+            handle = "@connectnp_official",
+            bio = "Official page of ConnectNP - Nepal's Premier Social, Community & Payments Super-App 🇳🇵",
+            category = "Official Community Organization",
+            website = "https://connectnp.app",
+            followersCount = 1250L,
+            isVerified = true,
+            ownerEmail = ADMIN_EMAIL,
+            isFollowing = true
+        )
+    )
+    val officialPage: StateFlow<OfficialPage> = _officialPage.asStateFlow()
+
+    private val _followedPageIds = MutableStateFlow<Set<String>>(setOf("official_connectnp"))
+    val followedPageIds: StateFlow<Set<String>> = _followedPageIds.asStateFlow()
+
+    fun isPageFollowed(pageId: String): Boolean = pageId in _followedPageIds.value
+
+    fun setOfficialPage(page: OfficialPage) {
+        _officialPage.value = page
+    }
+
+    fun toggleFollowPage(pageId: String, context: Context? = null) {
+        val currentlyFollowed = isPageFollowed(pageId)
+        val newFollowState = !currentlyFollowed
+        if (newFollowState) {
+            _followedPageIds.value = _followedPageIds.value + pageId
+        } else {
+            _followedPageIds.value = _followedPageIds.value - pageId
+        }
+        val delta = if (newFollowState) 1L else -1L
+        _officialPage.value = _officialPage.value.copy(
+            isFollowing = newFollowState,
+            followersCount = maxOf(0L, _officialPage.value.followersCount + delta)
+        )
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.setPageFollowStatus(pageId, newFollowState)
+                } catch (e: Exception) {
+                    // Handled gracefully
+                }
+            }
+        }
+    }
+
+    fun updateOfficialPage(
+        pageName: String,
+        bio: String,
+        website: String,
+        category: String,
+        context: Context? = null
+    ): Boolean {
+        // Enforce: ONLY the email gautamprasanna641@gmail.com has access to manage this specific Page
+        val currentEmail = try { Firebase.auth.currentUser?.email } catch (e: Exception) { null }
+        if (!isUserAdmin(currentEmail)) return false
+
+        _officialPage.value = _officialPage.value.copy(
+            pageName = pageName,
+            bio = bio,
+            website = website,
+            category = category
+        )
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.saveOfficialPage(_officialPage.value)
+                } catch (e: Exception) {
+                    // Handled gracefully
+                }
+            }
+        }
+        return true
+    }
+
+    fun addPagePost(
+        content: String,
+        location: String? = "Kathmandu, Nepal",
+        context: Context? = null
+    ): Boolean {
+        // Enforce: ONLY the email gautamprasanna641@gmail.com has access to post as this specific Page
+        val currentEmail = try { Firebase.auth.currentUser?.email } catch (e: Exception) { null }
+        if (!isUserAdmin(currentEmail)) return false
+
+        val page = _officialPage.value
+        val author = User(
+            id = page.id,
+            name = page.pageName,
+            handle = page.handle,
+            avatarResId = R.drawable.connectnp_icon_full,
+            isVerified = true,
+            isCreator = true,
+            bio = page.bio
+        )
+
+        val newPost = Post(
+            id = "page_post_${System.currentTimeMillis()}",
+            author = author,
+            content = content,
+            locationName = location ?: "Kathmandu, Nepal",
+            timestamp = "Just now",
+            likesCount = 5,
+            commentsCount = 0,
+            sharesCount = 1,
+            userReaction = ReactionType.LOVE,
+            isPagePost = true,
+            pageId = page.id
+        )
+
+        _posts.value = listOf(newPost) + _posts.value
+
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.createPagePost(
+                        content = content,
+                        location = location ?: "Kathmandu, Nepal",
+                        pageName = page.pageName,
+                        pageHandle = page.handle,
+                        pageId = page.id
+                    )
+                } catch (e: Exception) {
+                    // Handled gracefully
+                }
+            }
+        }
+        return true
+    }
+
     private val _blockedUserIds = MutableStateFlow<Set<String>>(emptySet())
     val blockedUserIds: StateFlow<Set<String>> = _blockedUserIds.asStateFlow()
 

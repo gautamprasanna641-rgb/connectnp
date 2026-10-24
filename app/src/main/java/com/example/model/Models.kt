@@ -61,7 +61,25 @@ data class Post(
     val poll: PollData? = null,
     val tags: List<String> = emptyList(),
     val locationName: String? = null,
-    val isBookmarked: Boolean = false
+    val isBookmarked: Boolean = false,
+    val isPagePost: Boolean = false,
+    val pageId: String? = null
+)
+
+data class OfficialPage(
+    val id: String = "official_connectnp",
+    val pageName: String = "CONNECTNP Official",
+    val handle: String = "@connectnp_official",
+    val bio: String = "Official page of ConnectNP - Nepal's Premier Social, Community & Payments Super-App 🇳🇵",
+    val profilePhoto: String? = null,
+    val coverPhoto: String? = null,
+    val category: String = "Official Organization",
+    val website: String = "https://connectnp.app",
+    val followersCount: Long = 1250L,
+    val isVerified: Boolean = true,
+    val ownerEmail: String = "gautamprasanna641@gmail.com",
+    val ownerId: String = "",
+    val isFollowing: Boolean = false
 )
 
 data class Story(

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.ConnectNpRepository
 import com.example.model.ReactionType
+import com.example.model.toOfficialPage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -220,6 +221,76 @@ class ExampleRobolectricTest {
       "Post should be permanently removed from repository",
       ConnectNpRepository.posts.value.any { it.id == postId }
     )
+  }
+
+  @Test
+  fun `verify official page follow toggling and count`() {
+    val initialPage = ConnectNpRepository.officialPage.value
+    assertEquals("official_connectnp", initialPage.id)
+    assertEquals("CONNECTNP Official", initialPage.pageName)
+    assertEquals("gautamprasanna641@gmail.com", initialPage.ownerEmail)
+    assertTrue("Official page must have verified badge", initialPage.isVerified)
+
+    val initialCount = ConnectNpRepository.officialPage.value.followersCount
+    val wasFollowing = ConnectNpRepository.isPageFollowed("official_connectnp")
+
+    // Toggle follow
+    ConnectNpRepository.toggleFollowPage("official_connectnp")
+    val afterToggleFollowing = ConnectNpRepository.isPageFollowed("official_connectnp")
+    assertEquals(!wasFollowing, afterToggleFollowing)
+
+    // Toggle back
+    ConnectNpRepository.toggleFollowPage("official_connectnp")
+    assertEquals(wasFollowing, ConnectNpRepository.isPageFollowed("official_connectnp"))
+    assertEquals(initialCount, ConnectNpRepository.officialPage.value.followersCount)
+  }
+
+  @Test
+  fun `verify admin restriction on official page management and posting`() {
+    // Normal user check
+    val normalEmail = "regular_user@gmail.com"
+    org.junit.Assert.assertFalse(ConnectNpRepository.isUserAdmin(normalEmail))
+
+    // Admin email check (case-insensitive)
+    val adminEmail = "gautamprasanna641@gmail.com"
+    assertTrue(ConnectNpRepository.isUserAdmin(adminEmail))
+    assertTrue(ConnectNpRepository.isUserAdmin("GautamPrasanna641@gmail.com"))
+
+    // Non-admin call without logged-in admin user fails
+    val updateResult = ConnectNpRepository.updateOfficialPage(
+      pageName = "Hacked Page",
+      bio = "Unauthorized",
+      website = "https://evil.com",
+      category = "None"
+    )
+    org.junit.Assert.assertFalse("Unauthorized user must not be able to update official page", updateResult)
+
+    val postResult = ConnectNpRepository.addPagePost("Unauthorized announcement")
+    org.junit.Assert.assertFalse("Unauthorized user must not be able to post as official page", postResult)
+  }
+
+  @Test
+  fun `verify FirestorePage mapping to OfficialPage`() {
+    val fsPage = com.example.model.FirestorePage(
+      id = "official_connectnp",
+      pageName = "CONNECTNP Official",
+      handle = "@connectnp_official",
+      bio = "Official page bio",
+      category = "Official Community Organization",
+      website = "https://connectnp.app",
+      followersCount = 5000L,
+      isVerified = true,
+      ownerEmail = "gautamprasanna641@gmail.com",
+      followers = listOf("user_1", "user_2")
+    )
+
+    val pageForUser1 = fsPage.toOfficialPage(currentUserId = "user_1")
+    assertEquals("CONNECTNP Official", pageForUser1.pageName)
+    assertEquals(5000L, pageForUser1.followersCount)
+    assertTrue("User 1 is in followers list", pageForUser1.isFollowing)
+
+    val pageForUser3 = fsPage.toOfficialPage(currentUserId = "user_3")
+    org.junit.Assert.assertFalse("User 3 is not in followers list", pageForUser3.isFollowing)
   }
 }
 

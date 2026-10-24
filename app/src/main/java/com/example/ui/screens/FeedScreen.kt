@@ -630,6 +630,15 @@ fun PostCardItem(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
+                    } else if (post.isPagePost || post.author.id == "official_connectnp") {
+                        Image(
+                            painter = painterResource(id = R.drawable.connectnp_icon_full),
+                            contentDescription = "Official Page",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(2.dp),
+                            contentScale = ContentScale.Fit
+                        )
                     } else {
                         Text(
                             text = post.author.name.take(1).uppercase(),
@@ -657,6 +666,21 @@ fun PostCardItem(
                                 tint = ConnectNpBlue,
                                 modifier = Modifier.size(14.dp)
                             )
+                        }
+                        if (post.isPagePost || post.author.id == "official_connectnp") {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = ConnectNpBlue.copy(alpha = 0.12f)
+                            ) {
+                                Text(
+                                    text = "OFFICIAL PAGE",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = ConnectNpBlue,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
                         }
                     }
 
