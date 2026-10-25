@@ -772,12 +772,13 @@ fun PostCardItem(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            // Post Media / Image with Coil & Asynchronous Loading Placeholder (TASK 5)
-            if (post.mediaResId != null) {
+            // Post Media / Image with Coil & Asynchronous Loading Placeholder
+            val postMediaData: Any? = post.mediaUrl ?: post.mediaResId
+            if (postMediaData != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 SubcomposeAsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(post.mediaResId)
+                        .data(postMediaData)
                         .crossfade(true)
                         .build(),
                     loading = {

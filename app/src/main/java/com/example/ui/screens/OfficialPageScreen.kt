@@ -42,6 +42,9 @@ import com.example.ui.theme.NepalCrimson
 import com.example.ui.theme.PoppinsFontFamily
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import android.net.Uri
+import com.example.util.MediaPickerType
+import com.example.util.rememberGalleryLauncher
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -615,8 +618,8 @@ fun OfficialPageScreen(
         CreatePagePostDialog(
             pageName = page.pageName,
             onDismiss = { showCreatePostDialog = false },
-            onPost = { content, location ->
-                val success = ConnectNpRepository.addPagePost(content, location, context)
+            onPost = { content, location, mediaUri ->
+                val success = ConnectNpRepository.addPagePost(content, location, mediaUri, context)
                 if (success) {
                     Toast.makeText(context, "Announcement published successfully to Page and Feed!", Toast.LENGTH_LONG).show()
                 } else {
@@ -830,10 +833,16 @@ private fun OfficialPostCard(
 private fun CreatePagePostDialog(
     pageName: String,
     onDismiss: () -> Unit,
-    onPost: (content: String, location: String) -> Unit
+    onPost: (content: String, location: String, mediaUri: Uri?) -> Unit
 ) {
     var content by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("Kathmandu, Nepal") }
+    var selectedMediaUri by remember { mutableStateOf<Uri?>(null) }
+
+    val galleryLauncher = rememberGalleryLauncher(
+        pickerType = MediaPickerType.IMAGE_AND_VIDEO,
+        onMediaSelected = { uri -> selectedMediaUri = uri }
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -879,13 +888,86 @@ private fun CreatePagePostDialog(
                     shape = RoundedCornerShape(10.dp),
                     singleLine = true
                 )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Gallery media attachment button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Attach Photo / Video:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Button(
+                        onClick = { galleryLauncher.launch() },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ConnectNpBlue.copy(alpha = 0.15f),
+                            contentColor = ConnectNpBlue
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.testTag("admin_page_gallery_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddPhotoAlternate,
+                            contentDescription = "Open Gallery",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Gallery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Selected media preview
+                if (selectedMediaUri != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, ConnectNpBlue.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    ) {
+                        AsyncImage(
+                            model = selectedMediaUri,
+                            contentDescription = "Selected media",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        IconButton(
+                            onClick = { selectedMediaUri = null },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.65f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     if (content.isNotBlank()) {
-                        onPost(content.trim(), location.trim())
+                        onPost(content.trim(), location.trim(), selectedMediaUri)
                     }
                 },
                 enabled = content.isNotBlank(),

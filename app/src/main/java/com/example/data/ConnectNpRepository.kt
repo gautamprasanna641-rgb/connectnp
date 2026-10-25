@@ -157,6 +157,7 @@ object ConnectNpRepository {
     fun addPagePost(
         content: String,
         location: String? = "Kathmandu, Nepal",
+        mediaUri: android.net.Uri? = null,
         context: Context? = null
     ): Boolean {
         // Enforce: ONLY the email gautamprasanna641@gmail.com has access to post as this specific Page
@@ -178,6 +179,7 @@ object ConnectNpRepository {
             id = "page_post_${System.currentTimeMillis()}",
             author = author,
             content = content,
+            mediaUrl = mediaUri?.toString(),
             locationName = location ?: "Kathmandu, Nepal",
             timestamp = "Just now",
             likesCount = 5,

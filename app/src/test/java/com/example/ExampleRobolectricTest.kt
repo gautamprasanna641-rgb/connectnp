@@ -353,5 +353,17 @@ class ExampleRobolectricTest {
       manifestContent.contains("android.permission.READ_EXTERNAL_STORAGE")
     )
   }
+
+  @Test
+  fun `verify page post and user post support gallery mediaUri`() {
+    val testUri = android.net.Uri.parse("content://media/external/images/media/42")
+    ConnectNpRepository.addPost(
+      content = "Testing user post with gallery photo",
+      location = "Kathmandu",
+      mediaUri = testUri
+    )
+    val latestPost = ConnectNpRepository.posts.value.first()
+    assertEquals("content://media/external/images/media/42", latestPost.mediaUrl)
+  }
 }
 
