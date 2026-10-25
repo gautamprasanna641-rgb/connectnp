@@ -16,6 +16,11 @@ data class FirestoreUserProfile(
     val walletBalance: Long = 0L,
     val blockedUsers: List<String> = emptyList(),
     val fcmToken: String = "",
+    val followersCount: Long = 0L,
+    val followingCount: Long = 0L,
+    val followers: List<String> = emptyList(),
+    val following: List<String> = emptyList(),
+    val postsCount: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -92,7 +97,7 @@ data class FirestorePage(
     val coverPhoto: String = "",
     val category: String = "Official Organization",
     val website: String = "https://connectnp.app",
-    val followersCount: Long = 1250L,
+    val followersCount: Long = 0L,
     val isVerified: Boolean = true,
     val ownerEmail: String = "gautamprasanna641@gmail.com",
     val ownerId: String = "",

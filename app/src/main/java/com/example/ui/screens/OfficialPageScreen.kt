@@ -35,6 +35,7 @@ import com.example.data.ConnectNpFirestoreRepository
 import com.example.data.ConnectNpRepository
 import com.example.model.Post
 import com.example.model.ReactionType
+import com.example.model.toOfficialPage
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.ConnectNpSuccess
 import com.example.ui.theme.NepalCrimson
@@ -59,6 +60,15 @@ fun OfficialPageScreen(
     val page by ConnectNpRepository.officialPage.collectAsState()
     val followedPageIds by ConnectNpRepository.followedPageIds.collectAsState()
     val isFollowing = page.id in followedPageIds || page.isFollowing
+
+    val firestoreRepo = remember { ConnectNpFirestoreRepository(context) }
+    val firestorePageDoc by firestoreRepo.observeOfficialPage(page.id).collectAsState(initial = null)
+
+    LaunchedEffect(firestorePageDoc) {
+        firestorePageDoc?.let {
+            ConnectNpRepository.setOfficialPage(it.toOfficialPage(currentUser?.uid ?: ""))
+        }
+    }
 
     val allPosts by ConnectNpRepository.posts.collectAsState()
     val pagePosts = remember(allPosts, page.id) {
@@ -369,7 +379,7 @@ fun OfficialPageScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = String.format("%,d", page.followersCount),
+                                    text = if (page.followersCount <= 0L) "0" else String.format("%,d", page.followersCount),
                                     fontWeight = FontWeight.Black,
                                     fontSize = 17.sp,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -383,7 +393,7 @@ fun OfficialPageScreen(
                             VerticalDivider(modifier = Modifier.height(28.dp))
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "${pagePosts.size}",
+                                    text = if (pagePosts.isEmpty()) "0" else "${pagePosts.size}",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 17.sp,
                                     color = MaterialTheme.colorScheme.onSurface

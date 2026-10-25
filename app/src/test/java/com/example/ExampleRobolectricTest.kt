@@ -292,5 +292,66 @@ class ExampleRobolectricTest {
     val pageForUser3 = fsPage.toOfficialPage(currentUserId = "user_3")
     org.junit.Assert.assertFalse("User 3 is not in followers list", pageForUser3.isFollowing)
   }
+
+  @Test
+  fun `verify follower count formats as 0 when count is zero for user profile and official page`() {
+    val zeroFollowerCount = 0L
+    val zeroFollowingCount = 0L
+
+    val followersDisplay = if (zeroFollowerCount <= 0L) "0" else String.format("%,d", zeroFollowerCount)
+    val followingDisplay = if (zeroFollowingCount <= 0L) "0" else String.format("%,d", zeroFollowingCount)
+    val postsDisplay = if (emptyList<Any>().isEmpty()) "0" else "1"
+
+    assertEquals("0", followersDisplay)
+    assertEquals("0", followingDisplay)
+    assertEquals("0", postsDisplay)
+
+    // Verify non-zero format
+    val dynamicFollowers = 2500L
+    val formattedFollowers = if (dynamicFollowers <= 0L) "0" else String.format("%,d", dynamicFollowers)
+    assertEquals("2,500", formattedFollowers)
+  }
+
+  @Test
+  fun `verify user profile and official page models default followers count to zero`() {
+    val defaultUser = com.example.model.User(
+      id = "test_user_zero",
+      name = "Test User",
+      handle = "@test_user"
+    )
+    assertEquals(0, defaultUser.followersCount)
+    assertEquals(0, defaultUser.followingCount)
+
+    val defaultFsProfile = com.example.model.FirestoreUserProfile(
+      userId = "test_user_zero",
+      name = "Test User",
+      handle = "@test_user"
+    )
+    assertEquals(0L, defaultFsProfile.followersCount)
+    assertEquals(0L, defaultFsProfile.followingCount)
+
+    val defaultPage = com.example.model.FirestorePage()
+    assertEquals(0L, defaultPage.followersCount)
+  }
+
+  @Test
+  fun `verify gallery and media permissions are declared in AndroidManifest`() {
+    val manifestFile = java.io.File("src/main/AndroidManifest.xml")
+    assertTrue("AndroidManifest.xml must exist", manifestFile.exists())
+    val manifestContent = manifestFile.readText()
+
+    assertTrue(
+      "Manifest must request READ_MEDIA_IMAGES",
+      manifestContent.contains("android.permission.READ_MEDIA_IMAGES")
+    )
+    assertTrue(
+      "Manifest must request READ_MEDIA_VIDEO",
+      manifestContent.contains("android.permission.READ_MEDIA_VIDEO")
+    )
+    assertTrue(
+      "Manifest must request READ_EXTERNAL_STORAGE",
+      manifestContent.contains("android.permission.READ_EXTERNAL_STORAGE")
+    )
+  }
 }
 

@@ -56,6 +56,12 @@ fun ProfileScreen(
 
     val userProfileDoc by firestoreRepo.observeUserProfile().collectAsState(initial = null)
 
+    LaunchedEffect(userProfileDoc) {
+        userProfileDoc?.let {
+            ConnectNpRepository.updateActiveUser(profileDoc = it)
+        }
+    }
+
     var displayName by remember(currentUser, userProfileDoc) {
         val resolved = userProfileDoc?.name?.takeIf { it.isNotBlank() }
             ?: currentUser?.displayName?.takeIf { it.isNotBlank() }
@@ -171,7 +177,13 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Follower & Post Stats Row
+                    // Follower & Post Stats Row (Dynamic from Firestore)
+                    val followersCount = userProfileDoc?.followersCount ?: 0L
+                    val followingCount = userProfileDoc?.followingCount ?: 0L
+                    val followersDisplay = if (followersCount <= 0L) "0" else String.format("%,d", followersCount)
+                    val followingDisplay = if (followingCount <= 0L) "0" else String.format("%,d", followingCount)
+                    val postsDisplay = if (myPosts.isEmpty()) "0" else "${myPosts.size}"
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth(0.9f)
@@ -182,11 +194,11 @@ fun ProfileScreen(
                             .padding(vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        StatItem(count = myPosts.size.toString(), label = if (isNepali) "पोस्टहरू" else "Posts")
+                        StatItem(count = postsDisplay, label = if (isNepali) "पोस्टहरू" else "Posts")
                         VerticalDivider(modifier = Modifier.height(30.dp))
-                        StatItem(count = "1.4k", label = if (isNepali) "फलोअरहरू" else "Followers")
+                        StatItem(count = followersDisplay, label = if (isNepali) "फलोअरहरू" else "Followers")
                         VerticalDivider(modifier = Modifier.height(30.dp))
-                        StatItem(count = "380", label = if (isNepali) "फलो गर्दै" else "Following")
+                        StatItem(count = followingDisplay, label = if (isNepali) "फलो गर्दै" else "Following")
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))

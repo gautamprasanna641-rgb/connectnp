@@ -20,8 +20,8 @@ data class User(
     val isCreator: Boolean = false,
     val bio: String = "",
     val location: String = "Kathmandu, Nepal",
-    val followersCount: Int = 1200,
-    val followingCount: Int = 340
+    val followersCount: Int = 0,
+    val followingCount: Int = 0
 )
 
 data class PollOption(
@@ -75,7 +75,7 @@ data class OfficialPage(
     val coverPhoto: String? = null,
     val category: String = "Official Organization",
     val website: String = "https://connectnp.app",
-    val followersCount: Long = 1250L,
+    val followersCount: Long = 0L,
     val isVerified: Boolean = true,
     val ownerEmail: String = "gautamprasanna641@gmail.com",
     val ownerId: String = "",

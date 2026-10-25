@@ -82,15 +82,15 @@ object ConnectNpRepository {
             bio = "Official page of ConnectNP - Nepal's Premier Social, Community & Payments Super-App 🇳🇵",
             category = "Official Community Organization",
             website = "https://connectnp.app",
-            followersCount = 1250L,
+            followersCount = 0L,
             isVerified = true,
             ownerEmail = ADMIN_EMAIL,
-            isFollowing = true
+            isFollowing = false
         )
     )
     val officialPage: StateFlow<OfficialPage> = _officialPage.asStateFlow()
 
-    private val _followedPageIds = MutableStateFlow<Set<String>>(setOf("official_connectnp"))
+    private val _followedPageIds = MutableStateFlow<Set<String>>(emptySet())
     val followedPageIds: StateFlow<Set<String>> = _followedPageIds.asStateFlow()
 
     fun isPageFollowed(pageId: String): Boolean = pageId in _followedPageIds.value
@@ -360,8 +360,8 @@ object ConnectNpRepository {
             isCreator = true,
             bio = bio,
             location = "Kathmandu, Nepal",
-            followersCount = 1,
-            followingCount = 1
+            followersCount = profileDoc?.followersCount?.toInt() ?: 0,
+            followingCount = profileDoc?.followingCount?.toInt() ?: 0
         )
     }
 
@@ -401,7 +401,14 @@ object ConnectNpRepository {
     }
 
     // --- Posts Logic ---
-    fun addPost(content: String, location: String? = null, mediaResId: Int? = null, customAuthor: User? = null) {
+    fun addPost(
+        content: String,
+        location: String? = null,
+        mediaResId: Int? = null,
+        customAuthor: User? = null,
+        mediaUri: android.net.Uri? = null,
+        mediaUrl: String? = null
+    ) {
         val author = customAuthor ?: getCurrentActiveUser()
         val newPost = Post(
             id = "post_${System.currentTimeMillis()}",
@@ -409,8 +416,9 @@ object ConnectNpRepository {
             content = content,
             locationName = location ?: "Kathmandu, Nepal",
             mediaResId = mediaResId,
+            mediaUrl = mediaUri?.toString() ?: mediaUrl,
             timestamp = "Just now",
-            likesCount = 1,
+            likesCount = 0,
             commentsCount = 0,
             sharesCount = 0,
             userReaction = ReactionType.LOVE

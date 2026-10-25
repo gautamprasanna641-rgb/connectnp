@@ -1,7 +1,9 @@
 package com.example.ui.components
 
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -25,10 +27,11 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.ConnectNpRepository
-import com.example.data.SampleDataProvider
 import com.example.model.User
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
+import com.example.util.MediaPickerType
+import com.example.util.rememberGalleryLauncher
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,13 +39,22 @@ fun CreatePostDialog(
     isNepali: Boolean,
     currentUser: User? = null,
     onDismiss: () -> Unit,
-    onSubmitPost: (content: String, location: String?, mediaResId: Int?) -> Unit
+    onSubmitPost: (content: String, location: String?, mediaResId: Int?, mediaUri: Uri?) -> Unit
 ) {
     var content by remember { mutableStateOf("") }
     var selectedLocation by remember { mutableStateOf("Kathmandu, Nepal") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var attachImage by remember { mutableStateOf(false) }
     var selectedMediaResId by remember { mutableIntStateOf(R.drawable.himalaya_banner_1792096400169) }
     var privacy by remember { mutableStateOf("Public") }
+
+    val galleryLauncher = rememberGalleryLauncher(
+        pickerType = MediaPickerType.IMAGE_AND_VIDEO,
+        onMediaSelected = { uri ->
+            selectedImageUri = uri
+            attachImage = false // prefer picked URI from user's gallery
+        }
+    )
 
     val locations = listOf(
         "Kathmandu, Nepal",
@@ -84,7 +96,7 @@ fun CreatePostDialog(
                     }
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 // Author Info & Privacy
                 val activeUser = currentUser ?: remember { ConnectNpRepository.getCurrentActiveUser() }
@@ -174,8 +186,40 @@ fun CreatePostDialog(
                     )
                 )
 
-                // Attached Image preview
-                if (attachImage) {
+                // Attached Gallery Image/Video Preview
+                if (selectedImageUri != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, ConnectNpBlue.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    ) {
+                        AsyncImage(
+                            model = selectedImageUri,
+                            contentDescription = "Selected media from phone gallery",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        IconButton(
+                            onClick = { selectedImageUri = null },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.65f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                } else if (attachImage) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
@@ -234,50 +278,58 @@ fun CreatePostDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Attachment Toggles
+                // Attachment Toggles (Gallery Picker + Presets)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (isNepali) "पोस्टमा थप्नुहोस्:" else "Add to post:",
+                        text = if (isNepali) "तस्वीर / भिडियो थप्नुहोस्:" else "Add Photo / Media:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
 
-                    Row {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Real Phone Gallery Button with runtime permission request
+                        Button(
+                            onClick = { galleryLauncher.launch() },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ConnectNpBlue.copy(alpha = 0.15f),
+                                contentColor = ConnectNpBlue
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.testTag("gallery_photo_picker_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AddPhotoAlternate,
+                                contentDescription = "Open Gallery",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isNepali) "ग्यालरी" else "Gallery",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
                         IconButton(onClick = {
                             attachImage = true
+                            selectedImageUri = null
                             selectedMediaResId = R.drawable.himalaya_banner_1792096400169
                         }) {
                             Icon(
-                                imageVector = Icons.Filled.PhotoLibrary,
-                                contentDescription = "Photo",
+                                imageVector = Icons.Filled.Landscape,
+                                contentDescription = "Preset Landscape",
                                 tint = Color(0xFF42B72A)
-                            )
-                        }
-                        IconButton(onClick = {
-                            attachImage = true
-                            selectedMediaResId = R.drawable.nepal_crafts_1792096421296
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.Storefront,
-                                contentDescription = "Marketplace photo",
-                                tint = NepalCrimson
-                            )
-                        }
-                        IconButton(onClick = {
-                            selectedLocation = "Sagarmatha National Park, Solukhumbu"
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.LocationOn,
-                                contentDescription = "Location",
-                                tint = ConnectNpBlue
                             )
                         }
                     }
@@ -292,7 +344,8 @@ fun CreatePostDialog(
                             onSubmitPost(
                                 content,
                                 selectedLocation,
-                                if (attachImage) selectedMediaResId else null
+                                if (selectedImageUri == null && attachImage) selectedMediaResId else null,
+                                selectedImageUri
                             )
                             onDismiss()
                         }

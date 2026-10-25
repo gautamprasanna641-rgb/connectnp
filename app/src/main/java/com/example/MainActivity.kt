@@ -402,9 +402,15 @@ fun ConnectNpMainApp(
             isNepali = isNepali,
             currentUser = currentActiveUser,
             onDismiss = { showCreatePostDialog = false },
-            onSubmitPost = { content, location, mediaResId ->
+            onSubmitPost = { content, location, mediaResId, mediaUri ->
                 val activeUser = ConnectNpRepository.getCurrentActiveUser()
-                ConnectNpRepository.addPost(content, location, mediaResId, activeUser)
+                ConnectNpRepository.addPost(
+                    content = content,
+                    location = location,
+                    mediaResId = mediaResId,
+                    customAuthor = activeUser,
+                    mediaUri = mediaUri
+                )
                 coroutineScope.launch {
                     try {
                         val repo = ConnectNpFirestoreRepository(context)

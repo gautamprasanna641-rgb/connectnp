@@ -58,6 +58,11 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
                 "handle" to handle,
                 "bio" to bio,
                 "walletBalance" to walletBalance,
+                "followersCount" to 0L,
+                "followingCount" to 0L,
+                "followers" to emptyList<String>(),
+                "following" to emptyList<String>(),
+                "postsCount" to 0L,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -695,6 +700,64 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun followUser(targetUserId: String): Result<Unit> {
+        val uid = requireUserId()
+        if (uid == targetUserId) return Result.failure(IllegalArgumentException("Cannot follow yourself"))
+        val targetPath = "users/$targetUserId"
+        return try {
+            val batch = db.batch()
+            val targetRef = db.collection("users").document(targetUserId)
+            val myRef = db.collection("users").document(uid)
+
+            batch.update(targetRef, mapOf(
+                "followers" to FieldValue.arrayUnion(uid),
+                "followersCount" to FieldValue.increment(1),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ))
+            batch.update(myRef, mapOf(
+                "following" to FieldValue.arrayUnion(targetUserId),
+                "followingCount" to FieldValue.increment(1),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ))
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, targetPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun unfollowUser(targetUserId: String): Result<Unit> {
+        val uid = requireUserId()
+        if (uid == targetUserId) return Result.failure(IllegalArgumentException("Cannot unfollow yourself"))
+        val targetPath = "users/$targetUserId"
+        return try {
+            val batch = db.batch()
+            val targetRef = db.collection("users").document(targetUserId)
+            val myRef = db.collection("users").document(uid)
+
+            batch.update(targetRef, mapOf(
+                "followers" to FieldValue.arrayRemove(uid),
+                "followersCount" to FieldValue.increment(-1),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ))
+            batch.update(myRef, mapOf(
+                "following" to FieldValue.arrayRemove(targetUserId),
+                "followingCount" to FieldValue.increment(-1),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ))
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, targetPath)
             Result.failure(e)
         }
     }

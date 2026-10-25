@@ -61,13 +61,12 @@ fun EditProfileDialog(
     var isSaving by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("") }
 
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        if (uri != null) {
+    val galleryLauncher = com.example.util.rememberGalleryLauncher(
+        pickerType = com.example.util.MediaPickerType.IMAGE_ONLY,
+        onMediaSelected = { uri ->
             selectedImageUri = uri
         }
-    }
+    )
 
     Dialog(onDismissRequest = { if (!isSaving) onDismiss() }) {
         Card(
@@ -113,9 +112,7 @@ fun EditProfileDialog(
                         .clip(CircleShape)
                         .border(3.dp, ConnectNpBlue, CircleShape)
                         .clickable(enabled = !isSaving) {
-                            photoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
+                            galleryLauncher.launch()
                         }
                         .testTag("edit_avatar_picker"),
                     contentAlignment = Alignment.Center
@@ -186,9 +183,7 @@ fun EditProfileDialog(
 
                 TextButton(
                     onClick = {
-                        photoPickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
+                        galleryLauncher.launch()
                     },
                     enabled = !isSaving
                 ) {
