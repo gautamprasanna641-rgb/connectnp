@@ -751,15 +751,24 @@ object ConnectNpRepository {
         _marketItems.value = listOf(newItem) + _marketItems.value
     }
 
+    const val P2P_TRANSACTION_FEE = 10.0
+
     // --- ConnectNP Pay Logic ---
-    fun sendMoney(recipientName: String, amount: Double, remarks: String, context: Context? = null): Boolean {
-        if (_walletBalance.value < amount) return false
-        _walletBalance.value -= amount
+    fun sendMoney(
+        recipientName: String,
+        amount: Double,
+        remarks: String,
+        context: Context? = null,
+        fee: Double = P2P_TRANSACTION_FEE
+    ): Boolean {
+        val totalDeduction = amount + fee
+        if (_walletBalance.value < totalDeduction) return false
+        _walletBalance.value -= totalDeduction
         val newTx = WalletTransaction(
             id = "tx_${System.currentTimeMillis()}",
-            title = "P2P Transfer to $recipientName",
+            title = "P2P to $recipientName (Transfer: रु ${amount.toInt()}, Fee: रु ${fee.toInt()})",
             date = "Today, Just now",
-            amountNpr = amount,
+            amountNpr = totalDeduction,
             isCredit = false,
             category = remarks.ifEmpty { "P2P Payment" }
         )
@@ -768,8 +777,13 @@ object ConnectNpRepository {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val repo = ConnectNpFirestoreRepository(context)
-                    repo.addTransaction("P2P Transfer to $recipientName", amount.toLong(), "debit")
+                    repo.addTransaction("P2P to $recipientName (Transfer: रु ${amount.toInt()}, Fee: रु ${fee.toInt()})", totalDeduction.toLong(), "debit")
                     repo.updateWalletBalance(_walletBalance.value.toLong())
+                    repo.recordAdminRevenueFee(
+                        feeAmount = fee.toLong(),
+                        transferAmount = amount.toLong(),
+                        recipient = recipientName
+                    )
                 } catch (e: Exception) {
                     android.util.Log.d("ConnectNpRepo", "sendMoney firestore sync: ${e.message}")
                 }

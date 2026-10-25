@@ -187,6 +187,37 @@
         "type",
         "createdAt"
       ]
+    },
+    "AdminRevenue": {
+      "title": "AdminRevenue",
+      "description": "Platform monetization revenue and transaction fee accounts",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Account ID"
+        },
+        "accountName": {
+          "type": "string",
+          "description": "Account name"
+        },
+        "totalRevenueNpr": {
+          "type": "integer",
+          "description": "Total accumulated monetization revenue in NPR"
+        },
+        "totalTransactionsCount": {
+          "type": "integer",
+          "description": "Total number of transactions with fees"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": [
+        "totalRevenueNpr"
+      ]
     }
   },
   "firestore": {
@@ -213,6 +244,12 @@
         "$ref": "#/entities/WalletTransaction"
       },
       "description": "User wallet transaction ledger"
+    },
+    "/admin_revenue/{docId}": {
+      "schema": {
+        "$ref": "#/entities/AdminRevenue"
+      },
+      "description": "Platform monetization revenue account"
     }
   }
 }

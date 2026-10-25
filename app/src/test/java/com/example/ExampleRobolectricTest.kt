@@ -104,9 +104,12 @@ class ExampleRobolectricTest {
   fun `verify wallet transaction`() {
     ConnectNpRepository.topUpWallet(500.0, "eSewa")
     val currentBalance = ConnectNpRepository.walletBalance.value
-    val success = ConnectNpRepository.sendMoney("Aayush Sharma", 100.0, "Test Payment")
+    val transferAmount = 100.0
+    val fee = ConnectNpRepository.P2P_TRANSACTION_FEE // Rs 10.0
+    val success = ConnectNpRepository.sendMoney("Aayush Sharma", transferAmount, "Test Payment")
     assertTrue(success)
-    assertEquals(currentBalance - 100.0, ConnectNpRepository.walletBalance.value, 0.01)
+    // Transfer amount (100) + Flat fee (10) = 110 deducted
+    assertEquals(currentBalance - (transferAmount + fee), ConnectNpRepository.walletBalance.value, 0.01)
   }
 
   @Test
@@ -399,6 +402,28 @@ class ExampleRobolectricTest {
     assertTrue("Wallet balance should be visible again", ConnectNpRepository.isBalanceVisible.value)
     val revealedDisplay = if (ConnectNpRepository.isBalanceVisible.value) dynamicDisplayEn else "Rs ••••••"
     assertEquals("Rs 1,250.00", revealedDisplay)
+  }
+
+  @Test
+  fun `verify p2p transfer fee breakdown and balance deduction`() {
+    ConnectNpRepository.setWalletBalance(200.0)
+    val initialBalance = ConnectNpRepository.walletBalance.value
+    val transferAmount = 150.0
+    val fee = ConnectNpRepository.P2P_TRANSACTION_FEE // Rs 10.0
+    val totalDeducted = transferAmount + fee // Rs 160.0
+
+    // Breakdown test
+    assertEquals(10.0, fee, 0.001)
+    assertEquals(160.0, totalDeducted, 0.001)
+
+    // Successful transfer
+    val success = ConnectNpRepository.sendMoney("Pratik", transferAmount, "Dinner")
+    assertTrue(success)
+    assertEquals(initialBalance - totalDeducted, ConnectNpRepository.walletBalance.value, 0.01)
+
+    // Insufficient balance test: current balance is now 40, transfer of 35 requires 35 + 10 = 45 > 40
+    val fail = ConnectNpRepository.sendMoney("Pratik", 35.0, "Taxi")
+    assertFalse("Transfer should fail because 35 + 10 fee exceeds balance of 40", fail)
   }
 }
 

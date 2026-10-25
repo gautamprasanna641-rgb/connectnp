@@ -248,6 +248,65 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    suspend fun recordAdminRevenueFee(
+        feeAmount: Long = 10L,
+        transferAmount: Long,
+        recipient: String
+    ): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: "anonymous_user"
+        val path = "admin_revenue/summary"
+        return try {
+            val summaryRef = db.collection("admin_revenue").document("summary")
+            val payload = hashMapOf<String, Any>(
+                "id" to "summary",
+                "accountName" to "Admin Revenue",
+                "totalRevenueNpr" to FieldValue.increment(feeAmount),
+                "totalTransactionsCount" to FieldValue.increment(1),
+                "lastFeeNpr" to feeAmount,
+                "lastTransferNpr" to transferAmount,
+                "lastRecipient" to recipient,
+                "lastSenderUid" to uid,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            summaryRef.set(payload, SetOptions.merge()).await()
+
+            val feeDocRef = summaryRef.collection("fees").document()
+            val feeEntry = hashMapOf<String, Any>(
+                "id" to feeDocRef.id,
+                "senderUid" to uid,
+                "recipient" to recipient,
+                "transferAmount" to transferAmount,
+                "feeAmount" to feeAmount,
+                "totalDeducted" to (transferAmount + feeAmount),
+                "type" to "p2p_transfer_fee",
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            feeDocRef.set(feeEntry).await()
+
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
+    fun observeAdminRevenue(): Flow<Long> = flow {
+        emitAll(
+            db.collection("admin_revenue").document("summary")
+                .snapshots()
+                .map { snapshot ->
+                    if (snapshot.exists()) {
+                        snapshot.getLong("totalRevenueNpr") ?: 0L
+                    } else {
+                        0L
+                    }
+                }
+                .catch { emit(0L) }
+        )
+    }
+
     suspend fun createMarketItem(
         title: String,
         priceNpr: Long,

@@ -83,7 +83,7 @@ fun ConnectNpPayScreen(
                             color = Color.White.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = "Zero-Fee P2P 🇳🇵",
+                                text = "Instant P2P • Rs 10 Fee 🇳🇵",
                                 color = Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -323,14 +323,22 @@ fun ConnectNpPayScreen(
     // Send Money Dialog
     if (showSendDialog) {
         SendMoneyDialog(
+            balance = balance,
             isNepali = isNepali,
             onDismiss = { showSendDialog = false },
             onConfirm = { recipient, amount, remarks ->
                 val success = onSendMoney(recipient, amount, remarks)
                 if (success) {
-                    statusMessage = "Successfully sent रु $amount to $recipient!"
+                    val total = amount + 10.0
+                    statusMessage = if (isNepali)
+                        "सफलतापूर्वक $recipient लाई रु $amount पठाइयो! (शुल्क: रु १०, जम्मा कटौती: रु $total)"
+                    else
+                        "Successfully sent Rs $amount to $recipient! (Fee: Rs 10, Total deducted: Rs $total)"
                 } else {
-                    statusMessage = "Insufficient balance. Please top up your wallet."
+                    statusMessage = if (isNepali)
+                        "मौज्दात अपुग छ। कृपया आफ्नो वालेट टप-अप गर्नुहोस् (रु १० शुल्क सहित)।"
+                    else
+                        "Insufficient balance. Please top up your wallet (including Rs 10 transfer fee)."
                 }
                 showSendDialog = false
             }
@@ -394,6 +402,7 @@ fun GatewayRow(name: String, id: String, color: Color) {
 
 @Composable
 fun SendMoneyDialog(
+    balance: Double = Double.MAX_VALUE,
     isNepali: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (recipient: String, amount: Double, remarks: String) -> Unit
@@ -401,66 +410,308 @@ fun SendMoneyDialog(
     var recipient by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
     var remarks by remember { mutableStateOf("") }
+    var showBreakdownConfirmation by remember { mutableStateOf(false) }
 
     val parsedAmount = amountText.toDoubleOrNull() ?: 0.0
-    val canSubmit = recipient.isNotBlank() && parsedAmount > 0.0
+    val fee = 10.0
+    val totalDeducted = parsedAmount + fee
+    val canProceed = recipient.isNotBlank() && parsedAmount > 0.0
+    val hasSufficientBalance = balance >= totalDeducted
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .testTag("send_money_dialog")
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = if (isNepali) "रकम पठाउनुहोस् (Instant P2P)" else "Send Money (Instant P2P)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+            Column(modifier = Modifier.padding(18.dp)) {
+                if (!showBreakdownConfirmation) {
+                    // Step 1: Input Transfer Details
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = null,
+                            tint = ConnectNpBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isNepali) "रकम पठाउनुहोस् (Instant P2P)" else "Send Money (Instant P2P)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
 
-                OutlinedTextField(
-                    value = recipient,
-                    onValueChange = { recipient = it },
-                    label = { Text("Recipient Name / Phone / @Handle") },
-                    placeholder = { Text("e.g. 9841000000 or username") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("Amount (रु NPR)") },
-                    placeholder = { Text("e.g. 500") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = recipient,
+                        onValueChange = { recipient = it },
+                        label = { Text("Recipient Name / Phone / @Handle") },
+                        placeholder = { Text("e.g. 9841000000 or username") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("send_money_recipient_input")
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = remarks,
-                    onValueChange = { remarks = it },
-                    label = { Text("Remarks") },
-                    placeholder = { Text("e.g. Tea & snacks") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { amountText = it },
+                        label = { Text("Transfer Amount (रु NPR)") },
+                        placeholder = { Text("e.g. 500") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("send_money_amount_input")
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Button(
-                    onClick = {
-                        if (canSubmit) {
-                            onConfirm(recipient.trim(), parsedAmount, remarks.trim())
+                    OutlinedTextField(
+                        value = remarks,
+                        onValueChange = { remarks = it },
+                        label = { Text("Remarks (Optional)") },
+                        placeholder = { Text("e.g. Tea & snacks") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("send_money_remarks_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Notice of Rs 10 flat transaction fee
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isNepali) "प्रत्येक स्थानान्तरणमा रु १० को निश्चित कारोबार शुल्क लाग्नेछ।" else "A flat fee of Rs 10 applies to each transfer.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
                         }
-                    },
-                    enabled = canSubmit,
-                    colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
-                    modifier = Modifier.fillMaxWidth().height(46.dp),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(if (isNepali) "रकम पठाउन पुष्टि गर्नुहोस्" else "Confirm Transfer", fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Cancel")
+                        }
+                        Button(
+                            onClick = {
+                                if (canProceed) {
+                                    showBreakdownConfirmation = true
+                                }
+                            },
+                            enabled = canProceed,
+                            colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
+                            modifier = Modifier
+                                .weight(1.5f)
+                                .testTag("send_money_proceed_button")
+                        ) {
+                            Text(if (isNepali) "अघि बढ्नुहोस्" else "Review Transfer", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    // Step 2: Confirmation Breakdown Dialog
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = null,
+                            tint = ConnectNpBlue,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isNepali) "स्थानान्तरण विवरण पुष्टि गर्नुहोस्" else "Confirm Transfer Breakdown",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Card(
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            // Recipient Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (isNepali) "प्राप्तकर्ता:" else "Recipient:",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = recipient,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.testTag("breakdown_recipient")
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Transfer Amount Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (isNepali) "स्थानान्तरण रकम:" else "Transfer Amount:",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "रु ${String.format("%,.2f", parsedAmount)}",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.testTag("breakdown_transfer_amount")
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Transaction Fee Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (isNepali) "कारोबार शुल्क (Fee):" else "Fee (Flat):",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "रु 10.00",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    color = NepalCrimson,
+                                    modifier = Modifier.testTag("breakdown_fee_amount")
+                                )
+                            }
+
+                            if (remarks.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = if (isNepali) "कैफियत:" else "Remarks:",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = remarks,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Total Deducted Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isNepali) "जम्मा कटौती:" else "Total Deducted:",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "रु ${String.format("%,.2f", totalDeducted)}",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 16.sp,
+                                    color = ConnectNpBlue,
+                                    modifier = Modifier.testTag("breakdown_total_deducted")
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (!hasSufficientBalance) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = NepalCrimson.copy(alpha = 0.15f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (isNepali)
+                                    "अपर्याप्त मौज्दात! आवश्यक: रु ${String.format("%,.2f", totalDeducted)}, उपलब्ध: रु ${String.format("%,.2f", balance)}"
+                                else
+                                    "Insufficient balance! Required: Rs ${String.format("%,.2f", totalDeducted)}, Available: Rs ${String.format("%,.2f", balance)}",
+                                color = NepalCrimson,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showBreakdownConfirmation = false },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("send_money_back_button")
+                        ) {
+                            Text("Back")
+                        }
+                        Button(
+                            onClick = {
+                                onConfirm(recipient.trim(), parsedAmount, remarks.trim())
+                            },
+                            enabled = hasSufficientBalance,
+                            colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
+                            modifier = Modifier
+                                .weight(1.5f)
+                                .testTag("send_money_confirm_button")
+                        ) {
+                            Text(if (isNepali) "पुष्टि गरी पठाउनुहोस्" else "Confirm & Send", fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }

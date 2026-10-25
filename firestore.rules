@@ -193,5 +193,16 @@ service cloud.firestore {
                        incoming().createdAt <= request.time;
       allow update, delete: if false;
     }
+
+    match /admin_revenue/{docId} {
+      allow get: if isSignedIn() && isValidId(docId);
+      allow list: if isAdmin();
+      allow create, update: if isSignedIn() && isValidId(docId);
+
+      match /fees/{feeId} {
+        allow get, list: if isSignedIn() && isValidId(feeId);
+        allow create: if isSignedIn() && isValidId(feeId);
+      }
+    }
   }
 }
