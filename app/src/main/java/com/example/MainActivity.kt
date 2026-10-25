@@ -106,6 +106,7 @@ fun ConnectNpMainApp(
     val datingProfiles by ConnectNpRepository.datingProfiles.collectAsStateWithLifecycle()
     val datingMatches by ConnectNpRepository.datingMatches.collectAsStateWithLifecycle()
     val walletBalance by ConnectNpRepository.walletBalance.collectAsStateWithLifecycle()
+    val isBalanceVisible by ConnectNpRepository.isBalanceVisible.collectAsStateWithLifecycle()
     val transactions by ConnectNpRepository.transactions.collectAsStateWithLifecycle()
     val isNepali by ConnectNpRepository.isNepaliLanguage.collectAsStateWithLifecycle()
     val isDark by ConnectNpRepository.isDarkMode.collectAsStateWithLifecycle()
@@ -116,12 +117,15 @@ fun ConnectNpMainApp(
 
     val context = LocalContext.current
     val firestoreRepo = remember(context) { ConnectNpFirestoreRepository(context) }
-    val userProfileDoc by firestoreRepo.observeUserProfile().collectAsStateWithLifecycle(initialValue = null)
+    val authUser = Firebase.auth.currentUser
+    val userProfileDoc by remember(authUser?.uid) {
+        firestoreRepo.observeUserProfile(authUser?.uid)
+    }.collectAsStateWithLifecycle(initialValue = null)
 
     val currentActiveUser by ConnectNpRepository.currentActiveUser.collectAsStateWithLifecycle()
 
-    LaunchedEffect(userProfileDoc, Firebase.auth.currentUser) {
-        ConnectNpRepository.updateActiveUser(userProfileDoc, Firebase.auth.currentUser)
+    LaunchedEffect(userProfileDoc, authUser) {
+        ConnectNpRepository.updateActiveUser(userProfileDoc, authUser)
         userProfileDoc?.blockedUsers?.let { blockedList ->
             if (blockedList.isNotEmpty()) {
                 ConnectNpRepository.setBlockedUserIds(blockedList)
@@ -129,6 +133,15 @@ fun ConnectNpMainApp(
         }
         userProfileDoc?.walletBalance?.let { balance ->
             ConnectNpRepository.setWalletBalance(balance.toDouble())
+        }
+    }
+
+    // Direct real-time Firestore sync for Wallet Balance
+    LaunchedEffect(firestoreRepo, authUser?.uid) {
+        if (authUser?.uid != null) {
+            firestoreRepo.observeWalletBalance(authUser.uid).collect { dynamicBalance ->
+                ConnectNpRepository.setWalletBalance(dynamicBalance)
+            }
         }
     }
 
@@ -235,6 +248,7 @@ fun ConnectNpMainApp(
                 unreadNotifications = unreadNotifications,
                 isNepali = isNepali,
                 isDark = isDark,
+                isBalanceVisible = isBalanceVisible,
                 onOpenWallet = { showPayScreen = true },
                 onOpenQrScanner = { showQrDialog = true },
                 onOpenNotifications = { showNotificationsSheet = true },
@@ -265,6 +279,8 @@ fun ConnectNpMainApp(
                     balance = walletBalance,
                     transactions = transactions,
                     isNepali = isNepali,
+                    isBalanceVisible = isBalanceVisible,
+                    onToggleBalanceVisibility = { ConnectNpRepository.toggleBalanceVisibility() },
                     onSendMoney = { recipient, amount, remarks ->
                         ConnectNpRepository.sendMoney(recipient, amount, remarks, context)
                     },

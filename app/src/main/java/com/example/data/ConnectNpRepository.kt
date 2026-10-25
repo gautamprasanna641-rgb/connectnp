@@ -268,6 +268,17 @@ object ConnectNpRepository {
     private val _walletBalance = MutableStateFlow(0.0)
     val walletBalance: StateFlow<Double> = _walletBalance.asStateFlow()
 
+    private val _isBalanceVisible = MutableStateFlow(true)
+    val isBalanceVisible: StateFlow<Boolean> = _isBalanceVisible.asStateFlow()
+
+    fun toggleBalanceVisibility() {
+        _isBalanceVisible.value = !_isBalanceVisible.value
+    }
+
+    fun setBalanceVisibility(visible: Boolean) {
+        _isBalanceVisible.value = visible
+    }
+
     private val _transactions = MutableStateFlow<List<WalletTransaction>>(emptyList())
     val transactions: StateFlow<List<WalletTransaction>> = _transactions.asStateFlow()
 

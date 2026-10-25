@@ -33,6 +33,7 @@ fun ConnectNpTopBar(
     unreadNotifications: Int,
     isNepali: Boolean,
     isDark: Boolean,
+    isBalanceVisible: Boolean = true,
     onOpenWallet: () -> Unit,
     onOpenQrScanner: () -> Unit,
     onOpenNotifications: () -> Unit,
@@ -171,7 +172,11 @@ fun ConnectNpTopBar(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "रु ${walletBalance.toInt()}",
+                                text = if (isBalanceVisible) {
+                                    if (walletBalance <= 0.0) "रु 0" else "रु ${walletBalance.toInt()}"
+                                } else {
+                                    "रु •••"
+                                },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Black,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer

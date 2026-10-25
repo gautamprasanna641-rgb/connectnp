@@ -32,6 +32,8 @@ fun ConnectNpPayScreen(
     balance: Double,
     transactions: List<WalletTransaction>,
     isNepali: Boolean,
+    isBalanceVisible: Boolean = true,
+    onToggleBalanceVisibility: () -> Unit = {},
     onSendMoney: (recipient: String, amount: Double, remarks: String) -> Boolean,
     onTopUp: (amount: Double, source: String) -> Unit,
     onScanQr: () -> Unit
@@ -92,17 +94,48 @@ fun ConnectNpPayScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Text(
-                        text = "रु ${String.format("%,.2f", balance)}",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val formattedAmount = if (balance <= 0.0) {
+                            if (isNepali) "रु ०" else "Rs 0"
+                        } else {
+                            if (isNepali) "रु ${String.format("%,.2f", balance)}" else "Rs ${String.format("%,.2f", balance)}"
+                        }
+                        val displayBalance = if (isBalanceVisible) formattedAmount else (if (isNepali) "रु ••••••" else "Rs ••••••")
+
+                        Text(
+                            text = displayBalance,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            modifier = Modifier.testTag("wallet_balance_display")
+                        )
+
+                        IconButton(
+                            onClick = onToggleBalanceVisibility,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.15f))
+                                .testTag("wallet_balance_toggle_eye")
+                        ) {
+                            Icon(
+                                imageVector = if (isBalanceVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = if (isBalanceVisible) "Hide Wallet Balance" else "Show Wallet Balance",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = if (balance <= 0.0) {
+                        text = if (!isBalanceVisible) {
+                            if (isNepali) "गोपनीयताका लागि मौज्दात लुकाइएको छ (हेर्न आँखा थिच्नुहोस्)" else "Balance hidden for privacy (tap eye icon to reveal)"
+                        } else if (balance <= 0.0) {
                             if (isNepali) "तपाईंको वालेट मौज्दात रु ० छ" else "Your wallet balance is Rs 0"
                         } else {
                             "Linked with eSewa & Khalti • Protected by Escrow"

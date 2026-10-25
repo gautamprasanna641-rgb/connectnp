@@ -14,6 +14,7 @@ import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.snapshots
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
@@ -77,7 +78,11 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
     }
 
     fun observeUserProfile(userId: String? = null): Flow<FirestoreUserProfile?> = flow {
-        val uid = userId ?: requireUserId()
+        val uid = userId ?: auth.currentUser?.uid
+        if (uid == null) {
+            emit(null)
+            return@flow
+        }
         val path = "users/$uid"
         emitAll(
             db.collection("users").document(uid)
@@ -91,7 +96,47 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
                 }
                 .catch { error ->
                     if (error is Exception) handleFirestoreError(error, OperationType.GET, path)
-                    throw error
+                    emit(null)
+                }
+        )
+    }
+
+    suspend fun getWalletBalance(userId: String? = null): Double {
+        val uid = userId ?: auth.currentUser?.uid ?: return 0.0
+        return try {
+            val snapshot = db.collection("users").document(uid).get().await()
+            if (snapshot.exists()) {
+                val profile = snapshot.toObject(FirestoreUserProfile::class.java)
+                (profile?.walletBalance ?: 0L).toDouble()
+            } else {
+                0.0
+            }
+        } catch (e: Exception) {
+            0.0
+        }
+    }
+
+    fun observeWalletBalance(userId: String? = null): Flow<Double> = flow {
+        val uid = userId ?: auth.currentUser?.uid
+        if (uid == null) {
+            emit(0.0)
+            return@flow
+        }
+        val path = "users/$uid"
+        emitAll(
+            db.collection("users").document(uid)
+                .snapshots()
+                .map { snapshot ->
+                    if (snapshot.exists()) {
+                        val profile = snapshot.toObject(FirestoreUserProfile::class.java)
+                        (profile?.walletBalance ?: 0L).toDouble()
+                    } else {
+                        0.0
+                    }
+                }
+                .catch { error ->
+                    if (error is Exception) handleFirestoreError(error, OperationType.GET, path)
+                    emit(0.0)
                 }
         )
     }
@@ -186,13 +231,14 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
     }
 
     suspend fun updateWalletBalance(newBalance: Long): Result<Unit> {
-        val uid = requireUserId()
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Not signed in"))
         val path = "users/$uid"
         return try {
-            db.collection("users").document(uid).update(
-                "walletBalance", newBalance,
-                "updatedAt", FieldValue.serverTimestamp()
-            ).await()
+            val payload = hashMapOf<String, Any>(
+                "walletBalance" to newBalance,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("users").document(uid).set(payload, SetOptions.merge()).await()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e

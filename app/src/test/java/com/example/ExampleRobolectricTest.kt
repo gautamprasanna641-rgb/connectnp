@@ -6,6 +6,7 @@ import com.example.data.ConnectNpRepository
 import com.example.model.ReactionType
 import com.example.model.toOfficialPage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -364,6 +365,40 @@ class ExampleRobolectricTest {
     )
     val latestPost = ConnectNpRepository.posts.value.first()
     assertEquals("content://media/external/images/media/42", latestPost.mediaUrl)
+  }
+
+  @Test
+  fun `verify wallet balance displays actual amount by default and can toggle visibility`() {
+    // 1. By default, visibility must be true
+    ConnectNpRepository.setBalanceVisibility(true)
+    assertTrue("Wallet balance must be visible by default", ConnectNpRepository.isBalanceVisible.value)
+
+    // 2. Default balance of 0 should format as Rs 0 or रु ०
+    ConnectNpRepository.setWalletBalance(0.0)
+    val zeroBalance = ConnectNpRepository.walletBalance.value
+    val zeroDisplayEn = if (zeroBalance <= 0.0) "Rs 0" else "Rs ${String.format("%,.2f", zeroBalance)}"
+    val zeroDisplayNp = if (zeroBalance <= 0.0) "रु ०" else "रु ${String.format("%,.2f", zeroBalance)}"
+    assertEquals("Rs 0", zeroDisplayEn)
+    assertEquals("रु ०", zeroDisplayNp)
+
+    // 3. Dynamic positive balance (e.g. Rs 1250) formats correctly
+    ConnectNpRepository.setWalletBalance(1250.0)
+    val dynamicBalance = ConnectNpRepository.walletBalance.value
+    val dynamicDisplayEn = if (dynamicBalance <= 0.0) "Rs 0" else "Rs ${String.format("%,.2f", dynamicBalance)}"
+    assertEquals("Rs 1,250.00", dynamicDisplayEn)
+
+    // 4. Toggle visibility hide
+    ConnectNpRepository.toggleBalanceVisibility()
+    assertFalse("Wallet balance should now be hidden", ConnectNpRepository.isBalanceVisible.value)
+
+    val hiddenDisplay = if (ConnectNpRepository.isBalanceVisible.value) dynamicDisplayEn else "Rs ••••••"
+    assertEquals("Rs ••••••", hiddenDisplay)
+
+    // 5. Toggle visibility back to reveal
+    ConnectNpRepository.toggleBalanceVisibility()
+    assertTrue("Wallet balance should be visible again", ConnectNpRepository.isBalanceVisible.value)
+    val revealedDisplay = if (ConnectNpRepository.isBalanceVisible.value) dynamicDisplayEn else "Rs ••••••"
+    assertEquals("Rs 1,250.00", revealedDisplay)
   }
 }
 
