@@ -34,6 +34,8 @@ service cloud.firestore {
              (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2000)) &&
              (!('isVerified' in data) || (data.isVerified is bool)) &&
              (!('walletBalance' in data) || (data.walletBalance is int && data.walletBalance >= 0)) &&
+             (!('walletMpin' in data) || (data.walletMpin is string && data.walletMpin.size() <= 100)) &&
+             (!('isBiometricEnabled' in data) || (data.isBiometricEnabled is bool)) &&
              (!('blockedUsers' in data) || (data.blockedUsers is list)) &&
              (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 500)) &&
              (!('followersCount' in data) || (data.followersCount is int && data.followersCount >= 0)) &&
@@ -90,7 +92,7 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'name', 'handle', 'createdAt']) &&
-                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'photoUrl', 'isVerified', 'walletBalance', 'blockedUsers', 'fcmToken', 'followersCount', 'followingCount', 'followers', 'following', 'postsCount', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'name', 'handle', 'bio', 'photoUrl', 'isVerified', 'walletBalance', 'walletMpin', 'isBiometricEnabled', 'blockedUsers', 'fcmToken', 'followersCount', 'followingCount', 'followers', 'following', 'postsCount', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        isValidUserProfile(incoming());
@@ -100,7 +102,7 @@ service cloud.firestore {
                         incoming().userId == existing().userId &&
                         incoming().createdAt == existing().createdAt &&
                         isValidUserProfile(incoming()) &&
-                        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'photoUrl', 'isVerified', 'walletBalance', 'blockedUsers', 'fcmToken', 'followersCount', 'followingCount', 'followers', 'following', 'postsCount', 'updatedAt'])) ||
+                        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'handle', 'bio', 'photoUrl', 'isVerified', 'walletBalance', 'walletMpin', 'isBiometricEnabled', 'blockedUsers', 'fcmToken', 'followersCount', 'followingCount', 'followers', 'following', 'postsCount', 'updatedAt'])) ||
                        (isSignedIn() && incoming().userId == existing().userId && incoming().diff(existing()).affectedKeys().hasOnly(['followers', 'followersCount', 'updatedAt'])) ||
                        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'updatedAt'])));
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;

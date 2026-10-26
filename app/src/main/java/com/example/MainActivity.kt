@@ -134,6 +134,7 @@ fun ConnectNpMainApp(
         userProfileDoc?.walletBalance?.let { balance ->
             ConnectNpRepository.setWalletBalance(balance.toDouble())
         }
+        ConnectNpRepository.initWalletSecurity(context, userProfileDoc)
     }
 
     // Direct real-time Firestore sync for Wallet Balance

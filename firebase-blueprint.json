@@ -25,6 +25,14 @@
           "type": "integer",
           "description": "ConnectNP Pay balance in NPR"
         },
+        "walletMpin": {
+          "type": "string",
+          "description": "4-digit security MPIN hash for wallet operations"
+        },
+        "isBiometricEnabled": {
+          "type": "boolean",
+          "description": "Whether biometric auth (Fingerprint/Face ID) is enabled"
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

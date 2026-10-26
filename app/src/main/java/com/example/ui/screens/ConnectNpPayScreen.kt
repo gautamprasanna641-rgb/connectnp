@@ -22,7 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.ConnectNpRepository
 import com.example.model.WalletTransaction
+import com.example.ui.components.ForgotMpinDialog
+import com.example.ui.components.WalletMpinSetupDialog
+import com.example.ui.components.WalletMpinVerifyDialog
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.ConnectNpSuccess
 import com.example.ui.theme.NepalCrimson
@@ -38,8 +42,17 @@ fun ConnectNpPayScreen(
     onTopUp: (amount: Double, source: String) -> Unit,
     onScanQr: () -> Unit
 ) {
+    val isBiometricEnabled by ConnectNpRepository.isBiometricEnabled.collectAsState()
+
     var showSendDialog by remember { mutableStateOf(false) }
     var showTopUpDialog by remember { mutableStateOf(false) }
+    var showMpinSetupDialog by remember { mutableStateOf(false) }
+    var showForgotMpinDialog by remember { mutableStateOf(false) }
+
+    var pendingSendTransfer by remember { mutableStateOf<Triple<String, Double, String>?>(null) }
+    var pendingTopUp by remember { mutableStateOf<Pair<Double, String>?>(null) }
+    var showVerifyDialogForSend by remember { mutableStateOf(false) }
+    var showVerifyDialogForTopUp by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
@@ -194,6 +207,102 @@ fun ConnectNpPayScreen(
             }
         }
 
+        // Wallet Security & MPIN Protection Card
+        item {
+            Spacer(modifier = Modifier.height(14.dp))
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("wallet_security_status_card")
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(ConnectNpBlue.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = "Security",
+                                    tint = ConnectNpBlue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (isNepali) "वालेट सुरक्षा (MPIN र बायोमेट्रिक)" else "Wallet Security & MPIN",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = if (isBiometricEnabled) "4-Digit MPIN • Biometric Bypass Active" else "4-Digit MPIN Protected",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = ConnectNpSuccess.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "PROTECTED",
+                                color = ConnectNpSuccess,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showMpinSetupDialog = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("setup_mpin_button"),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isNepali) "MPIN परिवर्तन" else "Change MPIN", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { showForgotMpinDialog = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("forgot_mpin_entry_button"),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isNepali) "MPIN बिर्सनुभयो?" else "Forgot MPIN?", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+
         // Linked Gateways Card
         item {
             Spacer(modifier = Modifier.height(16.dp))
@@ -320,40 +429,107 @@ fun ConnectNpPayScreen(
         }
     }
 
-    // Send Money Dialog
+    // Send Money Dialog (Breakdown confirmation leads to MPIN verification)
     if (showSendDialog) {
         SendMoneyDialog(
             balance = balance,
             isNepali = isNepali,
             onDismiss = { showSendDialog = false },
             onConfirm = { recipient, amount, remarks ->
-                val success = onSendMoney(recipient, amount, remarks)
+                pendingSendTransfer = Triple(recipient, amount, remarks)
+                showSendDialog = false
+                showVerifyDialogForSend = true
+            }
+        )
+    }
+
+    // Top Up Dialog (Leads to MPIN verification)
+    if (showTopUpDialog) {
+        TopUpDialog(
+            isNepali = isNepali,
+            onDismiss = { showTopUpDialog = false },
+            onConfirm = { amount, method ->
+                pendingTopUp = Pair(amount, method)
+                showTopUpDialog = false
+                showVerifyDialogForTopUp = true
+            }
+        )
+    }
+
+    // MPIN Verification for Send Money (Includes Rs 10 transfer fee in authorization)
+    if (showVerifyDialogForSend && pendingSendTransfer != null) {
+        val pending = pendingSendTransfer!!
+        val totalToAuthorize = pending.second + 10.0
+        WalletMpinVerifyDialog(
+            amountToAuthorize = totalToAuthorize,
+            recipientName = pending.first,
+            isNepali = isNepali,
+            onDismiss = {
+                showVerifyDialogForSend = false
+                pendingSendTransfer = null
+            },
+            onVerifiedSuccess = {
+                showVerifyDialogForSend = false
+                val success = onSendMoney(pending.first, pending.second, pending.third)
                 if (success) {
-                    val total = amount + 10.0
                     statusMessage = if (isNepali)
-                        "सफलतापूर्वक $recipient लाई रु $amount पठाइयो! (शुल्क: रु १०, जम्मा कटौती: रु $total)"
+                        "सफलतापूर्वक ${pending.first} लाई रु ${pending.second} पठाइयो! (शुल्क: रु १०, जम्मा कटौती: रु $totalToAuthorize)"
                     else
-                        "Successfully sent Rs $amount to $recipient! (Fee: Rs 10, Total deducted: Rs $total)"
+                        "Successfully sent Rs ${pending.second} to ${pending.first}! (Fee: Rs 10, Total deducted: Rs $totalToAuthorize)"
                 } else {
                     statusMessage = if (isNepali)
                         "मौज्दात अपुग छ। कृपया आफ्नो वालेट टप-अप गर्नुहोस् (रु १० शुल्क सहित)।"
                     else
                         "Insufficient balance. Please top up your wallet (including Rs 10 transfer fee)."
                 }
-                showSendDialog = false
+                pendingSendTransfer = null
             }
         )
     }
 
-    // Top Up Dialog
-    if (showTopUpDialog) {
-        TopUpDialog(
+    // MPIN Verification for Wallet Top Up
+    if (showVerifyDialogForTopUp && pendingTopUp != null) {
+        val pending = pendingTopUp!!
+        WalletMpinVerifyDialog(
+            amountToAuthorize = pending.first,
+            recipientName = null,
             isNepali = isNepali,
-            onDismiss = { showTopUpDialog = false },
-            onConfirm = { amount, method ->
-                onTopUp(amount, method)
-                statusMessage = "Successfully topped up रु $amount via $method!"
-                showTopUpDialog = false
+            onDismiss = {
+                showVerifyDialogForTopUp = false
+                pendingTopUp = null
+            },
+            onVerifiedSuccess = {
+                showVerifyDialogForTopUp = false
+                onTopUp(pending.first, pending.second)
+                statusMessage = if (isNepali)
+                    "सफलतापूर्वक रु ${pending.first} टप-अप भयो (${pending.second})!"
+                else
+                    "Successfully topped up रु ${pending.first} via ${pending.second}!"
+                pendingTopUp = null
+            }
+        )
+    }
+
+    // MPIN Setup Dialog for New Users or MPIN Change
+    if (showMpinSetupDialog) {
+        WalletMpinSetupDialog(
+            isNepali = isNepali,
+            onDismiss = { showMpinSetupDialog = false },
+            onMpinSetupComplete = {
+                showMpinSetupDialog = false
+                statusMessage = if (isNepali) "४-अङ्कको MPIN सफलतापूर्वक सुरक्षित गरियो!" else "4-digit MPIN successfully set up and active!"
+            }
+        )
+    }
+
+    // Forgot MPIN Dialog (Sends 6-digit OTP to user's registered email)
+    if (showForgotMpinDialog) {
+        ForgotMpinDialog(
+            isNepali = isNepali,
+            onDismiss = { showForgotMpinDialog = false },
+            onMpinResetSuccess = {
+                showForgotMpinDialog = false
+                statusMessage = if (isNepali) "नयाँ MPIN सफलतापूर्वक सेट भयो!" else "MPIN reset successfully! Use your new MPIN for future transactions."
             }
         )
     }

@@ -248,6 +248,42 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    suspend fun updateWalletMpin(newMpin: String): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Not signed in"))
+        val path = "users/$uid"
+        return try {
+            val payload = hashMapOf<String, Any>(
+                "walletMpin" to newMpin,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("users").document(uid).set(payload, SetOptions.merge()).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateBiometricEnabled(enabled: Boolean): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Not signed in"))
+        val path = "users/$uid"
+        return try {
+            val payload = hashMapOf<String, Any>(
+                "isBiometricEnabled" to enabled,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("users").document(uid).set(payload, SetOptions.merge()).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
     suspend fun recordAdminRevenueFee(
         feeAmount: Long = 10L,
         transferAmount: Long,

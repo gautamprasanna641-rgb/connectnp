@@ -29,6 +29,8 @@ import coil.compose.AsyncImage
 import com.example.data.ConnectNpFirestoreRepository
 import com.example.data.ConnectNpRepository
 import com.example.ui.components.EditProfileDialog
+import com.example.ui.components.ForgotMpinDialog
+import com.example.ui.components.WalletMpinSetupDialog
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
 import com.example.ui.theme.PoppinsFontFamily
@@ -52,6 +54,11 @@ fun SettingsScreen(
 
     val blockedUserIds by ConnectNpRepository.blockedUserIds.collectAsState()
     val blockedUserNames by ConnectNpRepository.blockedUserNames.collectAsState()
+
+    val isBiometricEnabled by ConnectNpRepository.isBiometricEnabled.collectAsState()
+    val walletMpin by ConnectNpRepository.walletMpin.collectAsState()
+    var showMpinSetupDialog by remember { mutableStateOf(false) }
+    var showForgotMpinDialog by remember { mutableStateOf(false) }
 
     val firestoreRepo = remember { ConnectNpFirestoreRepository(context) }
     val userProfileDoc by firestoreRepo.observeUserProfile().collectAsState(initial = null)
@@ -330,6 +337,177 @@ fun SettingsScreen(
                         checked = isDarkMode,
                         onCheckedChange = { onToggleDarkMode() }
                     )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Wallet Security & Biometric Authentication Section
+        item {
+            SettingsCategoryHeader(title = if (isNepali) "वालेट र सुरक्षा (Wallet & Security)" else "Wallet Security & MPIN")
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("wallet_security_section")
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    // Biometric Authentication Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(ConnectNpBlue.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Fingerprint,
+                                contentDescription = "Biometric",
+                                tint = ConnectNpBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isNepali) "बायोमेट्रिक प्रमाणीकरण" else "Biometric Authentication",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (isNepali)
+                                    "पिन थिच्नुको सट्टा फिंगरप्रिन्ट वा फेस आईडी प्रयोग गरी कारोबार गर्नुहोस्"
+                                else
+                                    "Use fingerprint / face ID to authorize transactions instead of typing PIN",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isBiometricEnabled,
+                            onCheckedChange = { isChecked ->
+                                ConnectNpRepository.setBiometricEnabled(isChecked, context)
+                                Toast.makeText(
+                                    context,
+                                    if (isChecked) {
+                                        if (isNepali) "बायोमेट्रिक प्रमाणीकरण सक्रिय भयो" else "Biometric authentication enabled"
+                                    } else {
+                                        if (isNepali) "बायोमेट्रिक प्रमाणीकरण निष्क्रिय भयो" else "Biometric authentication disabled"
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            modifier = Modifier.testTag("biometric_auth_switch")
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+
+                    // 4-Digit MPIN Management Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(NepalCrimson.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "MPIN",
+                                tint = NepalCrimson,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isNepali) "४-अङ्कको वालेट MPIN" else "4-Digit Wallet MPIN",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (walletMpin.isNullOrBlank()) {
+                                    if (isNepali) "सेट गरिएको छैन" else "Not configured"
+                                } else {
+                                    if (isNepali) "सुरक्षा सक्रिय (••••)" else "Protection Active (••••)"
+                                },
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { showMpinSetupDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("settings_manage_mpin_button")
+                        ) {
+                            Text(
+                                text = if (walletMpin.isNullOrBlank()) {
+                                    if (isNepali) "सेट गर्नुहोस्" else "Set MPIN"
+                                } else {
+                                    if (isNepali) "परिवर्तन" else "Change"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+
+                    // Forgot MPIN / Reset via OTP Button
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MarkEmailRead,
+                                contentDescription = "Reset MPIN",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isNepali) "MPIN बिर्सनुभयो?" else "Forgot MPIN?",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (isNepali) "इमेलमा ६-अङ्कको OTP पठाई पुनः सेट गर्नुहोस्" else "Reset MPIN using 6-digit OTP sent to registered email",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(
+                            onClick = { showForgotMpinDialog = true },
+                            modifier = Modifier.testTag("settings_forgot_mpin_button")
+                        ) {
+                            Text(if (isNepali) "OTP पठाउनुहोस्" else "Reset", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ConnectNpBlue)
+                        }
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -687,6 +865,28 @@ fun SettingsScreen(
                 currentDisplayName = newName
                 currentBio = newBio
                 currentPhotoUrl = newPhotoUrl
+            }
+        )
+    }
+
+    // MPIN Setup / Change Dialog
+    if (showMpinSetupDialog) {
+        WalletMpinSetupDialog(
+            isNepali = isNepali,
+            onDismiss = { showMpinSetupDialog = false },
+            onMpinSetupComplete = {
+                showMpinSetupDialog = false
+            }
+        )
+    }
+
+    // Forgot MPIN / Reset Dialog
+    if (showForgotMpinDialog) {
+        ForgotMpinDialog(
+            isNepali = isNepali,
+            onDismiss = { showForgotMpinDialog = false },
+            onMpinResetSuccess = {
+                showForgotMpinDialog = false
             }
         )
     }

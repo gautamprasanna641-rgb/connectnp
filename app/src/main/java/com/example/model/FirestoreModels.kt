@@ -14,6 +14,8 @@ data class FirestoreUserProfile(
     val photoUrl: String = "",
     val isVerified: Boolean = false,
     val walletBalance: Long = 0L,
+    val walletMpin: String = "",
+    val isBiometricEnabled: Boolean = false,
     val blockedUsers: List<String> = emptyList(),
     val fcmToken: String = "",
     val followersCount: Long = 0L,

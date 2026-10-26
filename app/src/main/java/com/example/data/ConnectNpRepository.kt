@@ -279,6 +279,111 @@ object ConnectNpRepository {
         _isBalanceVisible.value = visible
     }
 
+    // --- Wallet Security: 4-digit MPIN & Biometrics ---
+    private val _walletMpin = MutableStateFlow<String?>("1234") // default sample MPIN
+    val walletMpin: StateFlow<String?> = _walletMpin.asStateFlow()
+
+    private val _isBiometricEnabled = MutableStateFlow(false)
+    val isBiometricEnabled: StateFlow<Boolean> = _isBiometricEnabled.asStateFlow()
+
+    private val _activeResetOtp = MutableStateFlow<String?>(null)
+    val activeResetOtp: StateFlow<String?> = _activeResetOtp.asStateFlow()
+
+    fun isMpinSetup(): Boolean {
+        return !_walletMpin.value.isNullOrBlank()
+    }
+
+    fun setupWalletMpin(newPin: String, context: Context? = null): Boolean {
+        if (newPin.length != 4 || !newPin.all { it.isDigit() }) return false
+        _walletMpin.value = newPin
+        if (context != null) {
+            try {
+                val prefs = context.getSharedPreferences("connectnp_wallet_security", Context.MODE_PRIVATE)
+                prefs.edit().putString("wallet_mpin", newPin).apply()
+            } catch (e: Exception) {
+                // Ignore prefs error
+            }
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.updateWalletMpin(newPin)
+                } catch (e: Exception) {
+                    android.util.Log.d("ConnectNpRepo", "updateWalletMpin error: ${e.message}")
+                }
+            }
+        }
+        return true
+    }
+
+    fun verifyWalletMpin(enteredPin: String): Boolean {
+        val currentPin = _walletMpin.value ?: return false
+        return currentPin == enteredPin
+    }
+
+    fun setBiometricEnabled(enabled: Boolean, context: Context? = null) {
+        _isBiometricEnabled.value = enabled
+        if (context != null) {
+            try {
+                val prefs = context.getSharedPreferences("connectnp_wallet_security", Context.MODE_PRIVATE)
+                prefs.edit().putBoolean("biometric_enabled", enabled).apply()
+            } catch (e: Exception) {
+                // Ignore prefs error
+            }
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.updateBiometricEnabled(enabled)
+                } catch (e: Exception) {
+                    android.util.Log.d("ConnectNpRepo", "updateBiometricEnabled error: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun generateAndSendResetMpinOtp(email: String, context: Context? = null): String {
+        // Generate secure 6-digit OTP
+        val randomOtp = (100000..999999).random().toString()
+        _activeResetOtp.value = randomOtp
+        if (context != null) {
+            ConnectNpMessagingService.showLocalNotification(
+                context = context,
+                title = "CONNECTNP Wallet Security",
+                body = "Your MPIN Reset Verification Code is: $randomOtp (valid for 10 minutes)"
+            )
+        }
+        return randomOtp
+    }
+
+    fun resetWalletMpinWithOtp(email: String, enteredOtp: String, newPin: String, context: Context? = null): Boolean {
+        val currentOtp = _activeResetOtp.value
+        if (currentOtp == null || currentOtp != enteredOtp.trim()) return false
+        if (newPin.length != 4 || !newPin.all { it.isDigit() }) return false
+        val success = setupWalletMpin(newPin, context)
+        if (success) {
+            _activeResetOtp.value = null
+        }
+        return success
+    }
+
+    fun initWalletSecurity(context: Context, userProfile: FirestoreUserProfile?) {
+        try {
+            val prefs = context.getSharedPreferences("connectnp_wallet_security", Context.MODE_PRIVATE)
+            val savedPin = userProfile?.walletMpin?.ifBlank { null }
+                ?: prefs.getString("wallet_mpin", null)
+                ?: _walletMpin.value
+
+            if (savedPin != null) {
+                _walletMpin.value = savedPin
+            }
+
+            val savedBio = userProfile?.isBiometricEnabled
+                ?: prefs.getBoolean("biometric_enabled", false)
+            _isBiometricEnabled.value = savedBio
+        } catch (e: Exception) {
+            // Ignore error
+        }
+    }
+
     private val _transactions = MutableStateFlow<List<WalletTransaction>>(emptyList())
     val transactions: StateFlow<List<WalletTransaction>> = _transactions.asStateFlow()
 

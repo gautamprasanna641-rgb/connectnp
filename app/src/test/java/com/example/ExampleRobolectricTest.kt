@@ -425,5 +425,80 @@ class ExampleRobolectricTest {
     val fail = ConnectNpRepository.sendMoney("Pratik", 35.0, "Taxi")
     assertFalse("Transfer should fail because 35 + 10 fee exceeds balance of 40", fail)
   }
+
+  @Test
+  fun `verify 4-digit MPIN setup and validation rules`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+
+    // Setup valid 4-digit MPIN
+    val validPin = "5678"
+    val setupSuccess = ConnectNpRepository.setupWalletMpin(validPin, context)
+    assertTrue("Setting valid 4-digit MPIN should succeed", setupSuccess)
+    assertEquals(validPin, ConnectNpRepository.walletMpin.value)
+    assertTrue("MPIN should be reported as setup", ConnectNpRepository.isMpinSetup())
+
+    // Invalid PIN checks
+    assertFalse("3-digit PIN should be rejected", ConnectNpRepository.setupWalletMpin("123", context))
+    assertFalse("5-digit PIN should be rejected", ConnectNpRepository.setupWalletMpin("12345", context))
+    assertFalse("Non-numeric PIN should be rejected", ConnectNpRepository.setupWalletMpin("abcd", context))
+
+    // Valid PIN should remain unchanged
+    assertEquals(validPin, ConnectNpRepository.walletMpin.value)
+  }
+
+  @Test
+  fun `verify MPIN verification logic`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    ConnectNpRepository.setupWalletMpin("9876", context)
+
+    assertTrue("Correct MPIN should be verified successfully", ConnectNpRepository.verifyWalletMpin("9876"))
+    assertFalse("Incorrect MPIN should fail verification", ConnectNpRepository.verifyWalletMpin("0000"))
+    assertFalse("Partial MPIN should fail verification", ConnectNpRepository.verifyWalletMpin("987"))
+  }
+
+  @Test
+  fun `verify biometric authentication toggle in settings`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+
+    // Enable biometrics
+    ConnectNpRepository.setBiometricEnabled(true, context)
+    assertTrue("Biometric authentication should be enabled", ConnectNpRepository.isBiometricEnabled.value)
+
+    // Disable biometrics
+    ConnectNpRepository.setBiometricEnabled(false, context)
+    assertFalse("Biometric authentication should be disabled", ConnectNpRepository.isBiometricEnabled.value)
+  }
+
+  @Test
+  fun `verify forgot MPIN sends 6-digit OTP and successfully resets MPIN`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val testEmail = "citizen@connectnp.com"
+
+    // 1. Initial PIN
+    ConnectNpRepository.setupWalletMpin("1111", context)
+    assertTrue(ConnectNpRepository.verifyWalletMpin("1111"))
+
+    // 2. Request OTP for Forgot MPIN
+    val generatedOtp = ConnectNpRepository.generateAndSendResetMpinOtp(testEmail, context)
+    assertEquals(6, generatedOtp.length)
+    assertTrue("OTP must be 6 numeric digits", generatedOtp.all { it.isDigit() })
+    assertEquals(generatedOtp, ConnectNpRepository.activeResetOtp.value)
+
+    // 3. Reset with wrong OTP fails
+    val wrongOtpResult = ConnectNpRepository.resetWalletMpinWithOtp(testEmail, "999999", "2222", context)
+    assertFalse("Reset with incorrect OTP should fail", wrongOtpResult)
+    assertTrue("Original PIN should remain active", ConnectNpRepository.verifyWalletMpin("1111"))
+
+    // 4. Reset with invalid new PIN format fails
+    val invalidPinResult = ConnectNpRepository.resetWalletMpinWithOtp(testEmail, generatedOtp, "123", context)
+    assertFalse("Reset with non-4-digit PIN should fail", invalidPinResult)
+
+    // 5. Reset with correct OTP and valid 4-digit PIN succeeds
+    val successReset = ConnectNpRepository.resetWalletMpinWithOtp(testEmail, generatedOtp, "2222", context)
+    assertTrue("Reset with correct OTP should succeed", successReset)
+    assertTrue("New MPIN should now be verified", ConnectNpRepository.verifyWalletMpin("2222"))
+    assertFalse("Old MPIN should no longer be valid", ConnectNpRepository.verifyWalletMpin("1111"))
+    org.junit.Assert.assertNull("Active OTP should be cleared after successful reset", ConnectNpRepository.activeResetOtp.value)
+  }
 }
 
