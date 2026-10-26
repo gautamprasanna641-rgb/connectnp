@@ -38,6 +38,7 @@ import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -284,66 +285,75 @@ fun EditProfileDialog(
                             statusMessage = if (isNepali) "सुरक्षित गरिँदैछ..." else "Saving changes..."
 
                             coroutineScope.launch {
-                                var finalPhotoUrl = initialPhotoUrl
-
                                 try {
-                                    // 1. If only text changed, DO NOT wait for or perform an image upload!
-                                    if (isImageChanged && selectedImageUri != null) {
-                                        statusMessage = if (isNepali) "फोटो कम्प्रेस र अपलोड गरिँदैछ..." else "Compressing & uploading photo..."
-
-                                        // Compress image locally first to reduce resolution and file size
-                                        val cachedFileUri = withContext(Dispatchers.IO) {
-                                            ImageCompressor.compressImageUriToFileUri(context, selectedImageUri!!)
+                                    // 1. Immediately compress profile photo locally if changed for instant high-quality preview
+                                    val localCompressedUri = if (isImageChanged && selectedImageUri != null) {
+                                        withContext(Dispatchers.IO) {
+                                            ImageCompressor.compressProfileImageToFileUri(context, selectedImageUri!!)
                                         }
-                                        val uploadTargetUri = cachedFileUri ?: selectedImageUri!!
+                                    } else null
 
-                                        try {
-                                            val uploadResult = firestoreRepo.uploadProfilePicture(uploadTargetUri, context)
-                                            finalPhotoUrl = uploadResult.getOrNull() ?: uploadTargetUri.toString()
-                                        } catch (uploadEx: Exception) {
-                                            android.util.Log.w("EditProfile", "Storage upload failed: ${uploadEx.message}, falling back to local photo")
-                                            finalPhotoUrl = uploadTargetUri.toString()
-                                        }
-                                    }
+                                    val immediatePhotoUrl = localCompressedUri?.toString() ?: initialPhotoUrl
 
-                                    // 2. Save updated name/bio/photo in Firestore & Firebase Auth
-                                    statusMessage = if (isNepali) "प्रोफाइल अद्यावधिक गरिँदैछ..." else "Updating profile..."
-                                    try {
-                                        firestoreRepo.updateUserProfile(
-                                            name = cleanName,
-                                            bio = editBio.trim(),
-                                            photoUrl = finalPhotoUrl
-                                        )
-                                    } catch (dbEx: Exception) {
-                                        android.util.Log.w("EditProfile", "Firestore update warning: ${dbEx.message}")
-                                    }
-
-                                    // 3. Immediately update active user in global repository
+                                    // 2. Immediately update in-memory active user and notify parent screens
                                     ConnectNpRepository.updateActiveUser(
                                         name = cleanName,
                                         bio = editBio.trim(),
-                                        photoUrl = finalPhotoUrl
+                                        photoUrl = immediatePhotoUrl
                                     )
+                                    onProfileUpdated(cleanName, editBio.trim(), immediatePhotoUrl)
+
+                                    // 3. Fast save of text (name and bio) to Firestore using optimized SetOptions.merge
+                                    withContext(Dispatchers.IO) {
+                                        try {
+                                            firestoreRepo.updateUserProfile(
+                                                name = cleanName,
+                                                bio = editBio.trim(),
+                                                photoUrl = immediatePhotoUrl
+                                            )
+                                        } catch (dbEx: Exception) {
+                                            android.util.Log.w("EditProfile", "Firestore fast text update: ${dbEx.message}")
+                                        }
+                                    }
+
+                                    // 4. (REQUIREMENT 2) CLOSE LOADING DIALOG IMMEDIATELY!
+                                    // Do NOT wait for network image upload to finish.
+                                    isSaving = false
+                                    onDismiss()
 
                                     Toast.makeText(
                                         context,
-                                        if (isNepali) "प्रोफाइल सफलतापूर्वक अद्यावधिक भयो! 🇳🇵" else "Profile updated successfully! 🇳🇵",
+                                        if (isNepali) "प्रोफाइल सुरक्षित गरियो! 🇳🇵" else "Profile saved! 🇳🇵",
                                         Toast.LENGTH_SHORT
                                     ).show()
 
-                                    onProfileUpdated(cleanName, editBio.trim(), finalPhotoUrl)
+                                    // 5. Asynchronously upload compressed image in background if an image was selected
+                                    if (isImageChanged && selectedImageUri != null) {
+                                        val uploadSourceUri = localCompressedUri ?: selectedImageUri!!
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            try {
+                                                val uploadResult = firestoreRepo.uploadProfilePicture(uploadSourceUri, context)
+                                                val remoteDownloadUrl = uploadResult.getOrNull()
+                                                if (!remoteDownloadUrl.isNullOrBlank()) {
+                                                    // Update Firestore with final persistent Storage URL
+                                                    firestoreRepo.updateProfilePhotoUrl(remoteDownloadUrl)
+                                                    // Update repository state with persistent URL
+                                                    ConnectNpRepository.updateActiveUser(photoUrl = remoteDownloadUrl)
+                                                }
+                                            } catch (e: Exception) {
+                                                android.util.Log.w("EditProfile", "Background Storage upload: ${e.message}")
+                                            }
+                                        }
+                                    }
                                 } catch (e: Exception) {
                                     android.util.Log.e("EditProfile", "Save profile general error: ${e.message}")
+                                    isSaving = false
+                                    onDismiss()
                                     Toast.makeText(
                                         context,
                                         if (isNepali) "परिवर्तनहरू सुरक्षित गरियो" else "Changes saved",
                                         Toast.LENGTH_SHORT
                                     ).show()
-                                    onProfileUpdated(cleanName, editBio.trim(), finalPhotoUrl)
-                                } finally {
-                                    // ALWAYS close dialog properly, even if image upload failed or timed out
-                                    isSaving = false
-                                    onDismiss()
                                 }
                             }
                         },

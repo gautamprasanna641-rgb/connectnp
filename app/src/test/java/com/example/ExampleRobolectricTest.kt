@@ -500,5 +500,33 @@ class ExampleRobolectricTest {
     assertFalse("Old MPIN should no longer be valid", ConnectNpRepository.verifyWalletMpin("1111"))
     org.junit.Assert.assertNull("Active OTP should be cleared after successful reset", ConnectNpRepository.activeResetOtp.value)
   }
+
+  @Test
+  fun `verify compressProfileImage handles invalid or non-existent URIs gracefully`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val nonExistentUri = android.net.Uri.parse("content://media/external/images/media/888888888")
+    val bytes = com.example.util.ImageCompressor.compressProfileImageToBytes(context, nonExistentUri)
+    org.junit.Assert.assertNull(bytes)
+    val fileUri = com.example.util.ImageCompressor.compressProfileImageToFileUri(context, nonExistentUri)
+    org.junit.Assert.assertNull(fileUri)
+  }
+
+  @Test
+  fun `verify active user profile updates immediately in repository without waiting`() {
+    val updatedName = "Suman Thapa"
+    val updatedBio = "Developer from Pokhara 🇳🇵"
+    val updatedPhoto = "https://images.unsplash.com/sample_avatar"
+
+    ConnectNpRepository.updateActiveUser(
+        name = updatedName,
+        bio = updatedBio,
+        photoUrl = updatedPhoto
+    )
+
+    val currentUser = ConnectNpRepository.getCurrentActiveUser()
+    assertEquals(updatedName, currentUser.name)
+    assertEquals(updatedBio, currentUser.bio)
+    assertEquals(updatedPhoto, currentUser.avatarUrl)
+  }
 }
 

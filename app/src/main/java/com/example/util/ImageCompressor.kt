@@ -114,4 +114,36 @@ object ImageCompressor {
             null
         }
     }
+    /**
+     * Dedicated fast profile image compression to 384x384 JPEG at 75% quality (~25-45 KB),
+     * ensuring rapid uploads and low memory consumption.
+     */
+    fun compressProfileImageToBytes(
+        context: Context,
+        imageUri: Uri
+    ): ByteArray? {
+        return compressImageUriToBytes(
+            context = context,
+            imageUri = imageUri,
+            maxWidth = 384,
+            maxHeight = 384,
+            quality = 75
+        )
+    }
+
+    /**
+     * Compresses the profile image and saves it to cache for instant rendering without waiting for upload.
+     */
+    fun compressProfileImageToFileUri(
+        context: Context,
+        imageUri: Uri
+    ): Uri? {
+        return compressImageUriToFileUri(
+            context = context,
+            imageUri = imageUri,
+            maxWidth = 384,
+            maxHeight = 384,
+            quality = 75
+        )
+    }
 }

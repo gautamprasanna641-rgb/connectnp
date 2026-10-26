@@ -20,6 +20,9 @@ import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import com.example.util.ImageCompressor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -539,14 +542,16 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         val uid = requireUserId()
         return try {
             val storageRef = FirebaseStorage.getInstance().reference.child("profile_pictures/$uid.jpg")
-            val compressedBytes = context?.let { ImageCompressor.compressImageUriToBytes(it, imageUri) }
+            // Compress profile picture to optimized 384x384 JPEG bytes (~25-45 KB)
+            val compressedBytes = context?.let { ImageCompressor.compressProfileImageToBytes(it, imageUri) }
+                ?: context?.let { ImageCompressor.compressImageUriToBytes(it, imageUri) }
 
             val metadata = StorageMetadata.Builder()
                 .setContentType("image/jpeg")
                 .build()
 
-            // Strict 6-second timeout to prevent UI hangs on slow networks or storage issues
-            withTimeout(6000L) {
+            // Strict 5-second timeout to prevent hangs
+            withTimeout(5000L) {
                 if (compressedBytes != null && compressedBytes.isNotEmpty()) {
                     storageRef.putBytes(compressedBytes, metadata).await()
                 } else {
@@ -563,6 +568,10 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    /**
+     * Fast, optimized Firestore user profile update using SetOptions.merge().
+     * Asynchronously syncs Firebase Auth profile to prevent blocking UI.
+     */
     suspend fun updateUserProfile(name: String, bio: String, photoUrl: String? = null): Result<Unit> {
         val uid = requireUserId()
         val path = "users/$uid"
@@ -575,19 +584,54 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
             if (!photoUrl.isNullOrBlank()) {
                 updates["photoUrl"] = photoUrl
             }
-            db.collection("users").document(uid).update(updates).await()
+            // Use set with SetOptions.merge() for fast, idempotent document writes
+            db.collection("users").document(uid).set(updates, SetOptions.merge()).await()
 
-            try {
-                val profileUpdates = UserProfileChangeRequest.Builder()
-                    .setDisplayName(name)
-                    .apply {
-                        if (!photoUrl.isNullOrBlank()) {
-                            setPhotoUri(Uri.parse(photoUrl))
+            // Non-blocking background sync of Auth profile
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val profileUpdates = UserProfileChangeRequest.Builder()
+                        .setDisplayName(name)
+                        .apply {
+                            if (!photoUrl.isNullOrBlank()) {
+                                setPhotoUri(Uri.parse(photoUrl))
+                            }
                         }
-                    }
-                    .build()
-                auth.currentUser?.updateProfile(profileUpdates)?.await()
-            } catch (_: Exception) {}
+                        .build()
+                    auth.currentUser?.updateProfile(profileUpdates)?.await()
+                } catch (_: Exception) {}
+            }
+
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Asynchronously updates only the user photoUrl once background Storage upload finishes.
+     */
+    suspend fun updateProfilePhotoUrl(photoUrl: String): Result<Unit> {
+        val uid = requireUserId()
+        val path = "users/$uid"
+        return try {
+            val updates = mapOf(
+                "photoUrl" to photoUrl,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("users").document(uid).set(updates, SetOptions.merge()).await()
+
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val profileUpdates = UserProfileChangeRequest.Builder()
+                        .setPhotoUri(Uri.parse(photoUrl))
+                        .build()
+                    auth.currentUser?.updateProfile(profileUpdates)?.await()
+                } catch (_: Exception) {}
+            }
 
             Result.success(Unit)
         } catch (e: CancellationException) {
