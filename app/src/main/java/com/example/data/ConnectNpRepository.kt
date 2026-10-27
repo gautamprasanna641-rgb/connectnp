@@ -250,6 +250,9 @@ object ConnectNpRepository {
     )
     val messagesByThread: StateFlow<Map<String, List<ChatMessage>>> = _messagesByThread.asStateFlow()
 
+    private val _isAiThinking = MutableStateFlow(false)
+    val isAiThinking: StateFlow<Boolean> = _isAiThinking.asStateFlow()
+
     private val _marketItems = MutableStateFlow<List<MarketItem>>(emptyList())
     val marketItems: StateFlow<List<MarketItem>> = _marketItems.asStateFlow()
 
@@ -846,41 +849,50 @@ object ConnectNpRepository {
         userPrompt: String,
         context: Context? = null
     ) {
+        _isAiThinking.value = true
         CoroutineScope(Dispatchers.IO).launch {
-            // Generates contextual response maintaining all prior conversation turns
-            val reply = ConnectNpAiService.getAiResponseWithHistory(history, userPrompt)
+            try {
+                // Generates contextual response maintaining all prior conversation turns via Gemini API
+                val reply = ConnectNpAiService.getAiResponseWithHistory(history, userPrompt)
 
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
-                val aiMsg = ChatMessage(
-                    id = "ai_${System.currentTimeMillis()}",
-                    senderId = SampleDataProvider.aiBotUser.id,
-                    text = reply,
-                    timestamp = "Just now",
-                    isFromMe = false
-                )
-
-                val currentList = _messagesByThread.value["chat_ai"] ?: emptyList()
-                val updatedMap = _messagesByThread.value.toMutableMap()
-                updatedMap["chat_ai"] = currentList + aiMsg
-                _messagesByThread.value = updatedMap
-
-                _chatThreads.value = _chatThreads.value.map { thread ->
-                    if (thread.id == "chat_ai") {
-                        thread.copy(
-                            lastMessage = if (reply.length > 60) reply.take(60) + "..." else reply,
-                            lastMessageTime = "Just now"
-                        )
-                    } else thread
-                }
-
-                if (context != null) {
-                    incrementUnreadNotifications()
-                    ConnectNpMessagingService.showLocalNotification(
-                        context = context,
-                        title = "ConnectNP Assistant 🤖",
-                        body = reply,
-                        type = "chat"
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    _isAiThinking.value = false
+                    val aiMsg = ChatMessage(
+                        id = "ai_${System.currentTimeMillis()}",
+                        senderId = SampleDataProvider.aiBotUser.id,
+                        text = reply,
+                        timestamp = "Just now",
+                        isFromMe = false
                     )
+
+                    val currentList = _messagesByThread.value["chat_ai"] ?: emptyList()
+                    val updatedMap = _messagesByThread.value.toMutableMap()
+                    updatedMap["chat_ai"] = currentList + aiMsg
+                    _messagesByThread.value = updatedMap
+
+                    _chatThreads.value = _chatThreads.value.map { thread ->
+                        if (thread.id == "chat_ai") {
+                            thread.copy(
+                                lastMessage = if (reply.length > 60) reply.take(60) + "..." else reply,
+                                lastMessageTime = "Just now"
+                            )
+                        } else thread
+                    }
+
+                    if (context != null) {
+                        incrementUnreadNotifications()
+                        ConnectNpMessagingService.showLocalNotification(
+                            context = context,
+                            title = "ConnectNP Assistant 🤖",
+                            body = reply,
+                            type = "chat"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ConnectNpRepository", "AI generation error: ${e.message}", e)
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    _isAiThinking.value = false
                 }
             }
         }

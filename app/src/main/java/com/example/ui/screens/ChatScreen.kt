@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.ConnectNpRepository
 import com.example.data.SampleDataProvider
 import com.example.model.*
 import com.example.ui.theme.ConnectNpBlue
@@ -290,11 +292,13 @@ fun ActiveChatView(
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val isAiThinking by ConnectNpRepository.isAiThinking.collectAsStateWithLifecycle()
 
-    // Automatically scroll to latest message when user sends or AI responds
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Automatically scroll to latest message or thinking indicator
+    LaunchedEffect(messages.size, isAiThinking) {
+        val totalCount = messages.size + if (isAiThinking && thread.isAiAssistant) 1 else 0
+        if (totalCount > 0) {
+            listState.animateScrollToItem(totalCount - 1)
         }
     }
 
@@ -442,6 +446,58 @@ fun ActiveChatView(
         ) {
             items(messages) { msg ->
                 ChatMessageBubble(msg = msg)
+            }
+
+            // Real-time AI thinking indicator when Gemini is generating response
+            if (isAiThinking && thread.isAiAssistant) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .testTag("ai_thinking_indicator")
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(ConnectNpBlue, NepalCrimson))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SmartToy,
+                                contentDescription = "AI Thinking",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            tonalElevation = 2.dp
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = ConnectNpBlue
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isNepali) "ConnectNP AI (Gemini) जवाफ तयार गर्दैछ..." else "ConnectNP AI (Gemini) is thinking...",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 

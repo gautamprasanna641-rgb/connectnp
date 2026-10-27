@@ -3,8 +3,13 @@ package com.example.service
 import android.util.Log
 import com.example.BuildConfig
 import com.example.model.ChatMessage
+import com.google.firebase.Firebase
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.content
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -16,25 +21,74 @@ import java.util.concurrent.TimeUnit
 object ConnectNpAiService {
 
     private const val TAG = "ConnectNpAiService"
-    private const val MODEL_NAME = "gemini-2.5-flash"
+    // Latest supported general-use Gemini 3 model per AI Studio guidelines
+    const val MODEL_NAME = "gemini-3.8-flash"
     private const val GEMINI_ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL_NAME:generateContent"
 
+    const val SYSTEM_PROMPT =
+        "You are ConnectNP AI, the friendly, intelligent bilingual assistant for ConnectNP (Nepal's premier social and fintech super-app). " +
+        "You communicate warmly and naturally in English, Nepali (नेपाली), or romanized Nepali. " +
+        "You maintain complete conversational memory across previous turns. " +
+        "Provide culturally authentic, concise, and helpful advice regarding travel in Nepal (Himalayan treks like Annapurna, Everest, Langtang, permits, seasons, weather), " +
+        "Nepali cuisine & culture (momo, dal bhat, Newari dishes), ConnectNP community features, and ConnectNP Pay wallet and escrow services."
+
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(12, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    // Lazily evaluate Firebase AI Logic generative model
+    private val firebaseAiModel by lazy {
+        try {
+            Firebase.ai.generativeModel(
+                modelName = MODEL_NAME,
+                systemInstruction = content { text(SYSTEM_PROMPT) }
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Firebase AI model initialization: ${e.message}")
+            null
+        }
+    }
+
     /**
-     * Generates a conversational AI response given the full conversation history.
-     * Passes the entire multi-turn conversation context to Gemini if an API key is configured,
-     * or falls back to an intelligent multi-turn context-aware response engine.
+     * Generates a smart conversational AI response by connecting to the Google Gemini API.
+     * Passes the entire multi-turn conversation history for rich contextual understanding.
+     * Uses Firebase AI Logic with App Check as primary, with direct Gemini REST API and
+     * intelligent contextual engine fallbacks.
      */
     suspend fun getAiResponseWithHistory(
         history: List<ChatMessage>,
         newPrompt: String
     ): String = withContext(Dispatchers.IO) {
+        // 1. Primary: Firebase AI Logic (App Check attestation enabled)
+        try {
+            val model = firebaseAiModel
+            if (model != null) {
+                val relevantHistory = history.takeLast(20).filter { it.text.isNotBlank() }
+                val formattedHistory = relevantHistory.map { msg ->
+                    content(role = if (msg.isFromMe) "user" else "model") {
+                        text(msg.text)
+                    }
+                }
+                val responseText = withTimeout(40_000L) {
+                    val chat = model.startChat(history = formattedHistory)
+                    val response = chat.sendMessage(newPrompt)
+                    response.text
+                }
+                if (!responseText.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully received response from Firebase AI Logic ($MODEL_NAME)")
+                    return@withContext responseText.trim()
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Firebase AI Logic inference note: ${e.message}")
+        }
+
+        // 2. Secondary: Direct Google Gemini REST API with gemini-3.8-flash and multi-turn context
         val apiKey = try {
             BuildConfig.GEMINI_API_KEY
         } catch (_: Exception) {
@@ -43,20 +97,26 @@ object ConnectNpAiService {
 
         if (!apiKey.isNullOrBlank() && apiKey != "MY_GEMINI_API_KEY") {
             try {
-                val response = callGeminiWithHistory(apiKey, history, newPrompt)
-                if (!response.isNullOrBlank()) {
-                    return@withContext response
+                val restResponse = callGeminiWithHistory(apiKey, history, newPrompt)
+                if (!restResponse.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully received response from direct Gemini REST API ($MODEL_NAME)")
+                    return@withContext restResponse.trim()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Gemini API call failed, falling back to multi-turn context engine: ${e.message}")
+                Log.w(TAG, "Direct Gemini REST API call note: ${e.message}")
             }
         }
 
-        // Context-aware multi-turn engine preserving full chat history
+        // 3. Fallback: Multi-turn contextual engine preserving full history
         generateContextAwareFallback(history, newPrompt)
     }
 
-    private fun callGeminiWithHistory(
+    /**
+     * Calls Google Gemini generateContent REST API with multi-turn chat history.
+     */
+    fun callGeminiWithHistory(
         apiKey: String,
         history: List<ChatMessage>,
         newPrompt: String
@@ -68,10 +128,7 @@ object ConnectNpAiService {
                     put(
                         "parts",
                         JSONArray().put(
-                            JSONObject().put(
-                                "text",
-                                "You are ConnectNP AI, the friendly, helpful bilingual assistant for ConnectNP (Nepal's social & payments super-app). You communicate naturally in English, Nepali (नेपाली), or romanized Nepali. You maintain complete memory of previous messages in this conversation. Provide culturally accurate, concise advice regarding Nepal travel, trekking (permits, seasons, routes), food (momo, dal bhat, Newari dishes), ConnectNP Pay escrow, and local daily life."
-                            )
+                            JSONObject().put("text", SYSTEM_PROMPT)
                         )
                     )
                 }
@@ -80,7 +137,7 @@ object ConnectNpAiService {
             val contentsArray = JSONArray()
 
             // Include up to 20 previous conversational turns
-            val relevantHistory = history.takeLast(20)
+            val relevantHistory = history.takeLast(20).filter { it.text.isNotBlank() }
             relevantHistory.forEach { msg ->
                 val role = if (msg.isFromMe) "user" else "model"
                 val contentObj = JSONObject().apply {
@@ -101,6 +158,14 @@ object ConnectNpAiService {
             }
 
             put("contents", contentsArray)
+
+            put(
+                "generationConfig",
+                JSONObject().apply {
+                    put("temperature", 0.7)
+                    put("maxOutputTokens", 1200)
+                }
+            )
         }
 
         val url = "$GEMINI_ENDPOINT?key=$apiKey"
@@ -239,7 +304,7 @@ object ConnectNpAiService {
                 if (history.size > 2) {
                     "नमस्ते! Welcome back to our conversation. What else would you like to explore next about Nepal or ConnectNP?"
                 } else {
-                    "नमस्ते (Namaste)! I'm your ConnectNP AI Assistant. How can I assist you with your travels, community questions, or ConnectNP services today? 🇳🇵✨"
+                    "नमस्ते (Namaste)! I'm your ConnectNP AI Assistant powered by Google Gemini. How can I assist you with your travels, community questions, or ConnectNP services today? 🇳🇵✨"
                 }
             }
 

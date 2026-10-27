@@ -142,6 +142,12 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `verify Gemini model name is gemini-3_8-flash and system prompt is defined`() {
+    org.junit.Assert.assertEquals("gemini-3.8-flash", com.example.service.ConnectNpAiService.MODEL_NAME)
+    assertTrue(com.example.service.ConnectNpAiService.SYSTEM_PROMPT.contains("ConnectNP AI"))
+  }
+
+  @Test
   fun `verify chat repository has AI assistant thread and tracks messages`() {
     val aiThread = ConnectNpRepository.chatThreads.value.find { it.id == "chat_ai" }
     assertTrue("chat_ai thread should exist", aiThread != null)
