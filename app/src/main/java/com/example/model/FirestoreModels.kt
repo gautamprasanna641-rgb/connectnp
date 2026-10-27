@@ -16,6 +16,13 @@ data class FirestoreUserProfile(
     val walletBalance: Long = 0L,
     val walletMpin: String = "",
     val isBiometricEnabled: Boolean = false,
+    val esewaId: String = "",
+    val khaltiNumber: String = "",
+    val bankAccountNumber: String = "",
+    val bankName: String = "",
+    val bankAccountHolder: String = "",
+    val bankBranch: String = "",
+    val linkedPaymentMethods: List<Map<String, String>> = emptyList(),
     val blockedUsers: List<String> = emptyList(),
     val fcmToken: String = "",
     val followersCount: Long = 0L,
@@ -25,6 +32,20 @@ data class FirestoreUserProfile(
     val postsCount: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class FirestorePaymentMethod(
+    val id: String = "",
+    val userId: String = "",
+    val type: String = "ESEWA",
+    val title: String = "",
+    val accountNumber: String = "",
+    val accountHolderName: String = "",
+    val bankName: String = "",
+    val branch: String = "",
+    val isDefault: Boolean = false,
+    @ServerTimestamp val createdAt: Timestamp? = null
 )
 
 @IgnoreExtraProperties

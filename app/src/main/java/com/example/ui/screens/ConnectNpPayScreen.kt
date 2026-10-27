@@ -22,11 +22,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.ConnectNpRepository
+import com.example.model.LinkedPaymentMethod
+import com.example.model.PaymentMethodType
 import com.example.model.WalletTransaction
 import com.example.ui.components.ForgotMpinDialog
+import com.example.ui.components.LinkPaymentMethodDialog
 import com.example.ui.components.WalletMpinSetupDialog
 import com.example.ui.components.WalletMpinVerifyDialog
+import com.example.ui.components.WithdrawMoneyDialog
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.ConnectNpSuccess
 import com.example.ui.theme.NepalCrimson
@@ -40,19 +45,27 @@ fun ConnectNpPayScreen(
     onToggleBalanceVisibility: () -> Unit = {},
     onSendMoney: (recipient: String, amount: Double, remarks: String) -> Boolean,
     onTopUp: (amount: Double, source: String) -> Unit,
+    onWithdraw: (amount: Double, destination: String, methodType: String) -> Boolean = { _, _, _ -> true },
+    onLinkPaymentMethod: (LinkedPaymentMethod) -> Unit = {},
     onScanQr: () -> Unit
 ) {
+    val context = LocalContext.current
     val isBiometricEnabled by ConnectNpRepository.isBiometricEnabled.collectAsState()
+    val linkedMethods by ConnectNpRepository.linkedPaymentMethods.collectAsState()
 
     var showSendDialog by remember { mutableStateOf(false) }
     var showTopUpDialog by remember { mutableStateOf(false) }
+    var showWithdrawDialog by remember { mutableStateOf(false) }
+    var showLinkMethodDialog by remember { mutableStateOf(false) }
     var showMpinSetupDialog by remember { mutableStateOf(false) }
     var showForgotMpinDialog by remember { mutableStateOf(false) }
 
     var pendingSendTransfer by remember { mutableStateOf<Triple<String, Double, String>?>(null) }
     var pendingTopUp by remember { mutableStateOf<Pair<Double, String>?>(null) }
+    var pendingWithdraw by remember { mutableStateOf<Triple<Double, String, String>?>(null) }
     var showVerifyDialogForSend by remember { mutableStateOf(false) }
     var showVerifyDialogForTopUp by remember { mutableStateOf(false) }
+    var showVerifyDialogForWithdraw by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
@@ -160,14 +173,14 @@ fun ConnectNpPayScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // 3 Primary Actions: Send, Top Up, Scan
+                    // 4 Primary Actions: Send, Top Up, Withdraw, Scan
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         PayActionButton(
                             icon = Icons.Default.Send,
-                            label = if (isNepali) "रकम पठाउनुहोस्" else "Send Money",
+                            label = if (isNepali) "पठाउनुहोस्" else "Send",
                             onClick = { showSendDialog = true }
                         )
 
@@ -178,8 +191,14 @@ fun ConnectNpPayScreen(
                         )
 
                         PayActionButton(
+                            icon = Icons.Default.Payments,
+                            label = if (isNepali) "निकाल्नुहोस्" else "Withdraw",
+                            onClick = { showWithdrawDialog = true }
+                        )
+
+                        PayActionButton(
                             icon = Icons.Default.QrCodeScanner,
-                            label = if (isNepali) "QR स्क्यान" else "Scan & Pay",
+                            label = if (isNepali) "QR स्क्यान" else "Scan",
                             onClick = onScanQr
                         )
                     }
@@ -303,26 +322,103 @@ fun ConnectNpPayScreen(
             }
         }
 
-        // Linked Gateways Card
+        // Linked Payment Methods Card
         item {
             Spacer(modifier = Modifier.height(16.dp))
             Card(
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth().testTag("linked_payment_methods_card")
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = if (isNepali) "जोडिएका भुक्तानी माध्यमहरू" else "Linked Payment Methods",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = if (isNepali) "जोडिएका भुक्तानी माध्यमहरू" else "Linked Payment Methods",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = if (isNepali) "eSewa, Khalti वा बैंक खाता" else "eSewa, Khalti & Bank Accounts",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                    GatewayRow(name = "eSewa Nepal", id = "9841****** (Verified)", color = Color(0xFF60BB46))
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    GatewayRow(name = "Khalti Digital Wallet", id = "9802****** (Active)", color = Color(0xFF5C2D91))
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    GatewayRow(name = "FonePay & Nepal Clearing House (NCHL)", id = "CONNECTNP Direct IPS", color = ConnectNpBlue)
+                        Button(
+                            onClick = { showLinkMethodDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = ConnectNpBlue),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("link_payment_method_button")
+                        ) {
+                            Icon(Icons.Default.AddLink, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isNepali) "+ जोड्नुहोस्" else "+ Link Method",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (linkedMethods.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountBalanceWallet,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (isNepali) "कुनै भुक्तानी माध्यम जोडिएको छैन।" else "No payment methods linked yet.",
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { showLinkMethodDialog = true },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(if (isNepali) "eSewa / Khalti / बैंक जोड्नुहोस्" else "Link eSewa / Khalti / Bank", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        linkedMethods.forEachIndexed { index, method ->
+                            if (index > 0) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                            LinkedMethodItemRow(
+                                method = method,
+                                isNepali = isNepali,
+                                onTopUpClick = { showTopUpDialog = true },
+                                onWithdrawClick = { showWithdrawDialog = true },
+                                onUnlinkClick = {
+                                    ConnectNpRepository.unlinkPaymentMethod(method.id, context)
+                                    statusMessage = if (isNepali) "${method.title} हटाइयो" else "Unlinked ${method.title}"
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -446,12 +542,53 @@ fun ConnectNpPayScreen(
     // Top Up Dialog (Leads to MPIN verification)
     if (showTopUpDialog) {
         TopUpDialog(
+            linkedMethods = linkedMethods,
             isNepali = isNepali,
             onDismiss = { showTopUpDialog = false },
+            onLinkNewMethod = {
+                showTopUpDialog = false
+                showLinkMethodDialog = true
+            },
             onConfirm = { amount, method ->
                 pendingTopUp = Pair(amount, method)
                 showTopUpDialog = false
                 showVerifyDialogForTopUp = true
+            }
+        )
+    }
+
+    // Withdraw Dialog
+    if (showWithdrawDialog) {
+        WithdrawMoneyDialog(
+            balance = balance,
+            linkedMethods = linkedMethods,
+            isNepali = isNepali,
+            onDismiss = { showWithdrawDialog = false },
+            onLinkNewMethod = {
+                showWithdrawDialog = false
+                showLinkMethodDialog = true
+            },
+            onConfirmWithdraw = { amount, destination, methodType ->
+                pendingWithdraw = Triple(amount, destination, methodType)
+                showWithdrawDialog = false
+                showVerifyDialogForWithdraw = true
+            }
+        )
+    }
+
+    // Link Payment Method Dialog
+    if (showLinkMethodDialog) {
+        LinkPaymentMethodDialog(
+            isNepali = isNepali,
+            onDismiss = { showLinkMethodDialog = false },
+            onSaveMethod = { newMethod ->
+                showLinkMethodDialog = false
+                ConnectNpRepository.linkPaymentMethod(newMethod, context)
+                onLinkPaymentMethod(newMethod)
+                statusMessage = if (isNepali)
+                    "${newMethod.type.displayName} (${newMethod.accountNumber}) सफलतापूर्वक जोडियो!"
+                else
+                    "Successfully linked ${newMethod.type.displayName} (${newMethod.accountNumber})!"
             }
         )
     }
@@ -510,6 +647,36 @@ fun ConnectNpPayScreen(
         )
     }
 
+    // MPIN Verification for Wallet Withdraw
+    if (showVerifyDialogForWithdraw && pendingWithdraw != null) {
+        val pending = pendingWithdraw!!
+        WalletMpinVerifyDialog(
+            amountToAuthorize = pending.first,
+            recipientName = pending.second,
+            isNepali = isNepali,
+            onDismiss = {
+                showVerifyDialogForWithdraw = false
+                pendingWithdraw = null
+            },
+            onVerifiedSuccess = {
+                showVerifyDialogForWithdraw = false
+                val success = onWithdraw(pending.first, pending.second, pending.third)
+                if (success) {
+                    statusMessage = if (isNepali)
+                        "सफलतापूर्वक रु ${pending.first} ${pending.second} मा निकालियो!"
+                    else
+                        "Successfully withdrew Rs ${pending.first} to ${pending.second}!"
+                } else {
+                    statusMessage = if (isNepali)
+                        "निकाल्न मौज्दात अपुग छ।"
+                    else
+                        "Insufficient balance for withdrawal."
+                }
+                pendingWithdraw = null
+            }
+        )
+    }
+
     // MPIN Setup Dialog for New Users or MPIN Change
     if (showMpinSetupDialog) {
         WalletMpinSetupDialog(
@@ -556,6 +723,96 @@ fun PayActionButton(
         }
         Spacer(modifier = Modifier.height(6.dp))
         Text(text = label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun LinkedMethodItemRow(
+    method: LinkedPaymentMethod,
+    isNepali: Boolean,
+    onTopUpClick: () -> Unit,
+    onWithdrawClick: () -> Unit,
+    onUnlinkClick: () -> Unit
+) {
+    val methodColor = when (method.type) {
+        PaymentMethodType.ESEWA -> Color(0xFF60BB46)
+        PaymentMethodType.KHALTI -> Color(0xFF5C2D91)
+        PaymentMethodType.BANK -> ConnectNpBlue
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(methodColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = when (method.type) {
+                    PaymentMethodType.ESEWA -> Icons.Default.AccountBalanceWallet
+                    PaymentMethodType.KHALTI -> Icons.Default.Wallet
+                    PaymentMethodType.BANK -> Icons.Default.AccountBalance
+                },
+                contentDescription = null,
+                tint = methodColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = method.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                if (method.isDefault) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = ConnectNpSuccess.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "DEFAULT",
+                            color = ConnectNpSuccess,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+            Text(
+                text = "${method.accountNumber} • ${method.accountHolderName}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (method.branch.isNotBlank()) {
+                Text(
+                    text = "Branch: ${method.branch}",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        IconButton(
+            onClick = onUnlinkClick,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.DeleteOutline,
+                contentDescription = "Unlink",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 
@@ -896,12 +1153,15 @@ fun SendMoneyDialog(
 
 @Composable
 fun TopUpDialog(
+    linkedMethods: List<LinkedPaymentMethod> = emptyList(),
     isNepali: Boolean,
     onDismiss: () -> Unit,
+    onLinkNewMethod: () -> Unit = {},
     onConfirm: (amount: Double, method: String) -> Unit
 ) {
     var amountText by remember { mutableStateOf("") }
-    var selectedMethod by remember { mutableStateOf("eSewa") }
+    val initialMethod = linkedMethods.firstOrNull()?.let { "${it.title} (${it.accountNumber})" } ?: "eSewa"
+    var selectedMethod by remember { mutableStateOf(initialMethod) }
 
     val parsedAmount = amountText.toDoubleOrNull() ?: 0.0
     val canSubmit = parsedAmount > 0.0
@@ -925,15 +1185,38 @@ fun TopUpDialog(
                     onValueChange = { amountText = it },
                     label = { Text("Amount (रु NPR)") },
                     placeholder = { Text("e.g. 1000") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("Select Payment Gateway:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isNepali) "भुक्तानी माध्यम छान्नुहोस्:" else "Select Payment Gateway / Method:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    TextButton(
+                        onClick = onLinkNewMethod,
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(if (isNepali) "+ नयाँ जोड्नुहोस्" else "+ Link New", fontSize = 11.sp)
+                    }
+                }
                 Spacer(modifier = Modifier.height(6.dp))
 
-                listOf("eSewa", "Khalti", "Nepal Bank IPS").forEach { method ->
+                val options = if (linkedMethods.isNotEmpty()) {
+                    linkedMethods.map { "${it.title} (${it.accountNumber})" } + listOf("eSewa (Direct)", "Khalti (Direct)", "Nepal Bank IPS")
+                } else {
+                    listOf("eSewa", "Khalti", "Nepal Bank IPS")
+                }
+
+                options.forEach { method ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -943,7 +1226,7 @@ fun TopUpDialog(
                     ) {
                         RadioButton(selected = selectedMethod == method, onClick = { selectedMethod = method })
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(method, fontWeight = FontWeight.Medium)
+                        Text(method, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                     }
                 }
 

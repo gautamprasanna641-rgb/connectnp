@@ -382,9 +382,173 @@ object ConnectNpRepository {
             val savedBio = userProfile?.isBiometricEnabled
                 ?: prefs.getBoolean("biometric_enabled", false)
             _isBiometricEnabled.value = savedBio
+
+            // Sync linked payment methods from Firestore profile
+            if (userProfile != null) {
+                val methodsFromProfile = mutableListOf<LinkedPaymentMethod>()
+                if (userProfile.linkedPaymentMethods.isNotEmpty()) {
+                    userProfile.linkedPaymentMethods.forEach { map ->
+                        val id = map["id"] ?: "pm_${System.currentTimeMillis()}"
+                        val typeStr = map["type"] ?: "ESEWA"
+                        val type = when (typeStr.uppercase()) {
+                            "KHALTI" -> PaymentMethodType.KHALTI
+                            "BANK" -> PaymentMethodType.BANK
+                            else -> PaymentMethodType.ESEWA
+                        }
+                        val accNum = map["accountNumber"] ?: ""
+                        val holder = map["accountHolderName"] ?: userProfile.name
+                        val bank = map["bankName"] ?: ""
+                        val branch = map["branch"] ?: ""
+                        val title = when (type) {
+                            PaymentMethodType.ESEWA -> "eSewa ($accNum)"
+                            PaymentMethodType.KHALTI -> "Khalti ($accNum)"
+                            PaymentMethodType.BANK -> if (bank.isNotBlank()) "$bank ($accNum)" else "Bank Account ($accNum)"
+                        }
+                        methodsFromProfile.add(
+                            LinkedPaymentMethod(
+                                id = id,
+                                type = type,
+                                title = title,
+                                accountNumber = accNum,
+                                accountHolderName = holder,
+                                bankName = bank,
+                                branch = branch,
+                                isDefault = map["isDefault"] == "true",
+                                linkedAt = "Verified"
+                            )
+                        )
+                    }
+                } else {
+                    if (userProfile.esewaId.isNotBlank()) {
+                        methodsFromProfile.add(
+                            LinkedPaymentMethod(
+                                id = "pm_esewa_profile",
+                                type = PaymentMethodType.ESEWA,
+                                title = "eSewa (${userProfile.esewaId})",
+                                accountNumber = userProfile.esewaId,
+                                accountHolderName = userProfile.name,
+                                isDefault = true,
+                                linkedAt = "Verified"
+                            )
+                        )
+                    }
+                    if (userProfile.khaltiNumber.isNotBlank()) {
+                        methodsFromProfile.add(
+                            LinkedPaymentMethod(
+                                id = "pm_khalti_profile",
+                                type = PaymentMethodType.KHALTI,
+                                title = "Khalti (${userProfile.khaltiNumber})",
+                                accountNumber = userProfile.khaltiNumber,
+                                accountHolderName = userProfile.name,
+                                isDefault = methodsFromProfile.isEmpty(),
+                                linkedAt = "Active"
+                            )
+                        )
+                    }
+                    if (userProfile.bankAccountNumber.isNotBlank()) {
+                        methodsFromProfile.add(
+                            LinkedPaymentMethod(
+                                id = "pm_bank_profile",
+                                type = PaymentMethodType.BANK,
+                                title = "${userProfile.bankName.ifBlank { "Bank" }} (${userProfile.bankAccountNumber})",
+                                accountNumber = userProfile.bankAccountNumber,
+                                accountHolderName = userProfile.bankAccountHolder.ifBlank { userProfile.name },
+                                bankName = userProfile.bankName,
+                                branch = userProfile.bankBranch,
+                                isDefault = methodsFromProfile.isEmpty(),
+                                linkedAt = "Verified"
+                            )
+                        )
+                    }
+                }
+                if (methodsFromProfile.isNotEmpty()) {
+                    _linkedPaymentMethods.value = methodsFromProfile
+                }
+            }
         } catch (e: Exception) {
             // Ignore error
         }
+    }
+
+    // --- Linked Payment Methods (eSewa, Khalti, Bank) ---
+    private val _linkedPaymentMethods = MutableStateFlow<List<LinkedPaymentMethod>>(
+        listOf(
+            LinkedPaymentMethod(
+                id = "pm_default_esewa",
+                type = PaymentMethodType.ESEWA,
+                title = "eSewa Nepal",
+                accountNumber = "9841002233",
+                accountHolderName = "ConnectNP User",
+                isDefault = true,
+                linkedAt = "Verified"
+            ),
+            LinkedPaymentMethod(
+                id = "pm_default_khalti",
+                type = PaymentMethodType.KHALTI,
+                title = "Khalti Digital Wallet",
+                accountNumber = "9802004455",
+                accountHolderName = "ConnectNP User",
+                isDefault = false,
+                linkedAt = "Active"
+            )
+        )
+    )
+    val linkedPaymentMethods: StateFlow<List<LinkedPaymentMethod>> = _linkedPaymentMethods.asStateFlow()
+
+    fun linkPaymentMethod(
+        method: LinkedPaymentMethod,
+        context: Context? = null
+    ): Boolean {
+        val updated = listOf(method) + _linkedPaymentMethods.value.filter { it.id != method.id }
+        _linkedPaymentMethods.value = updated
+
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.saveLinkedPaymentMethod(
+                        type = method.type.name,
+                        accountNumber = method.accountNumber,
+                        accountHolderName = method.accountHolderName,
+                        bankName = method.bankName,
+                        branch = method.branch,
+                        isDefault = method.isDefault
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.d("ConnectNpRepo", "linkPaymentMethod firestore sync error: ${e.message}")
+                }
+            }
+        }
+        return true
+    }
+
+    fun unlinkPaymentMethod(
+        methodId: String,
+        context: Context? = null
+    ): Boolean {
+        val target = _linkedPaymentMethods.value.find { it.id == methodId }
+        _linkedPaymentMethods.value = _linkedPaymentMethods.value.filter { it.id != methodId }
+
+        if (context != null && target != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    val map = mapOf(
+                        "id" to target.id,
+                        "type" to target.type.name,
+                        "accountNumber" to target.accountNumber,
+                        "accountHolderName" to target.accountHolderName,
+                        "bankName" to target.bankName,
+                        "branch" to target.branch,
+                        "isDefault" to target.isDefault.toString()
+                    )
+                    repo.removeLinkedPaymentMethod(map)
+                } catch (e: Exception) {
+                    android.util.Log.d("ConnectNpRepo", "unlinkPaymentMethod error: ${e.message}")
+                }
+            }
+        }
+        return true
     }
 
     private val _transactions = MutableStateFlow<List<WalletTransaction>>(emptyList())
@@ -978,6 +1142,37 @@ object ConnectNpRepository {
                 }
             }
         }
+    }
+
+    fun withdrawMoney(
+        amount: Double,
+        destination: String,
+        methodType: String,
+        context: Context? = null
+    ): Boolean {
+        if (_walletBalance.value < amount) return false
+        _walletBalance.value = maxOf(0.0, _walletBalance.value - amount)
+        val newTx = WalletTransaction(
+            id = "tx_${System.currentTimeMillis()}",
+            title = "Withdrawal to $destination",
+            date = "Today, Just now",
+            amountNpr = amount,
+            isCredit = false,
+            category = "Bank/Wallet Withdrawal"
+        )
+        _transactions.value = listOf(newTx) + _transactions.value
+        if (context != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val repo = ConnectNpFirestoreRepository(context)
+                    repo.addTransaction("Withdrawal to $destination ($methodType)", amount.toLong(), "debit")
+                    repo.updateWalletBalance(_walletBalance.value.toLong())
+                } catch (e: Exception) {
+                    android.util.Log.d("ConnectNpRepo", "withdrawMoney firestore sync: ${e.message}")
+                }
+            }
+        }
+        return true
     }
 
     // --- Jobs Logic ---

@@ -288,6 +288,12 @@ fun ConnectNpMainApp(
                     onTopUp = { amount, source ->
                         ConnectNpRepository.topUpWallet(amount, source, context)
                     },
+                    onWithdraw = { amount, destination, methodType ->
+                        ConnectNpRepository.withdrawMoney(amount, destination, methodType, context)
+                    },
+                    onLinkPaymentMethod = { method ->
+                        ConnectNpRepository.linkPaymentMethod(method, context)
+                    },
                     onScanQr = { showQrDialog = true }
                 )
             } else {

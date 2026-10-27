@@ -534,5 +534,84 @@ class ExampleRobolectricTest {
     assertEquals(updatedBio, currentUser.bio)
     assertEquals(updatedPhoto, currentUser.avatarUrl)
   }
+
+  @Test
+  fun `verify linking payment methods updates repository and supports eSewa, Khalti, Bank`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+
+    // 1. Link eSewa
+    val esewaMethod = com.example.model.LinkedPaymentMethod(
+        id = "test_pm_esewa_1",
+        type = com.example.model.PaymentMethodType.ESEWA,
+        title = "eSewa Nepal",
+        accountNumber = "9841999888",
+        accountHolderName = "Prasanna Gautam",
+        isDefault = true
+    )
+    ConnectNpRepository.linkPaymentMethod(esewaMethod, context)
+
+    val methodsAfterEsewa = ConnectNpRepository.linkedPaymentMethods.value
+    assertTrue("Linked methods must contain test eSewa", methodsAfterEsewa.any { it.id == "test_pm_esewa_1" })
+    assertEquals("9841999888", methodsAfterEsewa.first { it.id == "test_pm_esewa_1" }.accountNumber)
+
+    // 2. Link Bank Account
+    val bankMethod = com.example.model.LinkedPaymentMethod(
+        id = "test_pm_bank_1",
+        type = com.example.model.PaymentMethodType.BANK,
+        title = "Nabil Bank Limited",
+        accountNumber = "01020000001234",
+        accountHolderName = "Prasanna Gautam",
+        bankName = "Nabil Bank Limited",
+        branch = "New Road, Kathmandu",
+        isDefault = false
+    )
+    ConnectNpRepository.linkPaymentMethod(bankMethod, context)
+
+    val methodsAfterBank = ConnectNpRepository.linkedPaymentMethods.value
+    assertTrue("Linked methods must contain test Bank", methodsAfterBank.any { it.id == "test_pm_bank_1" })
+    assertEquals("Nabil Bank Limited", methodsAfterBank.first { it.id == "test_pm_bank_1" }.bankName)
+
+    // 3. Unlink method
+    ConnectNpRepository.unlinkPaymentMethod("test_pm_esewa_1", context)
+    val methodsAfterUnlink = ConnectNpRepository.linkedPaymentMethods.value
+    assertFalse("Unlinked method must no longer be present", methodsAfterUnlink.any { it.id == "test_pm_esewa_1" })
+  }
+
+  @Test
+  fun `verify wallet withdrawal deducts balance and logs transaction`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+
+    // Set balance to 5000
+    ConnectNpRepository.setWalletBalance(5000.0)
+    assertEquals(5000.0, ConnectNpRepository.walletBalance.value, 0.01)
+
+    // Attempt withdrawal higher than balance -> should fail
+    val failWithdraw = ConnectNpRepository.withdrawMoney(
+        amount = 6000.0,
+        destination = "eSewa (9841000000)",
+        methodType = "ESEWA",
+        context = context
+    )
+    assertFalse("Withdrawal exceeding balance must fail", failWithdraw)
+    assertEquals(5000.0, ConnectNpRepository.walletBalance.value, 0.01)
+
+    // Valid withdrawal of 1500 -> should succeed and reduce balance to 3500
+    val initialTxCount = ConnectNpRepository.transactions.value.size
+    val successWithdraw = ConnectNpRepository.withdrawMoney(
+        amount = 1500.0,
+        destination = "Nabil Bank (01020000001234)",
+        methodType = "BANK",
+        context = context
+    )
+    assertTrue("Valid withdrawal must succeed", successWithdraw)
+    assertEquals(3500.0, ConnectNpRepository.walletBalance.value, 0.01)
+    assertEquals(initialTxCount + 1, ConnectNpRepository.transactions.value.size)
+
+    val latestTx = ConnectNpRepository.transactions.value.first()
+    assertFalse("Withdrawal transaction must be a debit", latestTx.isCredit)
+    assertEquals(1500.0, latestTx.amountNpr, 0.01)
+    assertTrue("Transaction title should mention destination", latestTx.title.contains("Nabil Bank"))
+  }
 }
+
 

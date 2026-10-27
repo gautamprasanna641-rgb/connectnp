@@ -193,3 +193,22 @@ data class WalletTransaction(
     val category: String,
     val status: String = "Completed"
 )
+
+enum class PaymentMethodType(val displayName: String, val code: String) {
+    ESEWA("eSewa ID", "esewa"),
+    KHALTI("Khalti Number", "khalti"),
+    BANK("Bank Account", "bank")
+}
+
+data class LinkedPaymentMethod(
+    val id: String = "",
+    val type: PaymentMethodType = PaymentMethodType.ESEWA,
+    val title: String = "",
+    val accountNumber: String = "",
+    val accountHolderName: String = "",
+    val bankName: String = "",
+    val branch: String = "",
+    val isDefault: Boolean = false,
+    val linkedAt: String = "Active"
+)
+

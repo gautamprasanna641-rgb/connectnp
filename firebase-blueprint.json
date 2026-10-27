@@ -33,6 +33,37 @@
           "type": "boolean",
           "description": "Whether biometric auth (Fingerprint/Face ID) is enabled"
         },
+        "esewaId": {
+          "type": "string",
+          "description": "Registered eSewa ID mobile number"
+        },
+        "khaltiNumber": {
+          "type": "string",
+          "description": "Registered Khalti mobile number"
+        },
+        "bankAccountNumber": {
+          "type": "string",
+          "description": "Linked bank account number"
+        },
+        "bankName": {
+          "type": "string",
+          "description": "Name of the linked commercial bank in Nepal"
+        },
+        "bankAccountHolder": {
+          "type": "string",
+          "description": "Account holder name for bank account"
+        },
+        "bankBranch": {
+          "type": "string",
+          "description": "Branch name of linked bank"
+        },
+        "linkedPaymentMethods": {
+          "type": "array",
+          "description": "List of user's linked payment methods (eSewa, Khalti, Bank)",
+          "items": {
+            "type": "object"
+          }
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

@@ -331,6 +331,96 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    suspend fun saveLinkedPaymentMethod(
+        type: String,
+        accountNumber: String,
+        accountHolderName: String,
+        bankName: String = "",
+        branch: String = "",
+        isDefault: Boolean = false
+    ): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Not signed in"))
+        val path = "users/$uid"
+        val methodId = "pm_${type.lowercase()}_${System.currentTimeMillis()}"
+        return try {
+            val methodMap = hashMapOf<String, String>(
+                "id" to methodId,
+                "type" to type.uppercase(),
+                "accountNumber" to accountNumber,
+                "accountHolderName" to accountHolderName,
+                "bankName" to bankName,
+                "branch" to branch,
+                "isDefault" to isDefault.toString()
+            )
+
+            val updatePayload = hashMapOf<String, Any>(
+                "updatedAt" to FieldValue.serverTimestamp(),
+                "linkedPaymentMethods" to FieldValue.arrayUnion(methodMap)
+            )
+
+            when (type.uppercase()) {
+                "ESEWA" -> updatePayload["esewaId"] = accountNumber
+                "KHALTI" -> updatePayload["khaltiNumber"] = accountNumber
+                "BANK" -> {
+                    updatePayload["bankAccountNumber"] = accountNumber
+                    updatePayload["bankName"] = bankName
+                    updatePayload["bankAccountHolder"] = accountHolderName
+                    updatePayload["bankBranch"] = branch
+                }
+            }
+
+            db.collection("users").document(uid).set(updatePayload, SetOptions.merge()).await()
+
+            val titleStr = when (type.uppercase()) {
+                "ESEWA" -> "eSewa ($accountNumber)"
+                "KHALTI" -> "Khalti ($accountNumber)"
+                else -> if (bankName.isNotBlank()) "$bankName ($accountNumber)" else "Bank ($accountNumber)"
+            }
+            val subDoc = hashMapOf<String, Any>(
+                "id" to methodId,
+                "userId" to uid,
+                "type" to type.uppercase(),
+                "title" to titleStr,
+                "accountNumber" to accountNumber,
+                "accountHolderName" to accountHolderName,
+                "bankName" to bankName,
+                "branch" to branch,
+                "isDefault" to isDefault,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("users").document(uid).collection("payment_methods").document(methodId).set(subDoc).await()
+
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeLinkedPaymentMethod(methodMap: Map<String, String>): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Not signed in"))
+        val path = "users/$uid"
+        val methodId = methodMap["id"] ?: ""
+        return try {
+            val updatePayload = hashMapOf<String, Any>(
+                "updatedAt" to FieldValue.serverTimestamp(),
+                "linkedPaymentMethods" to FieldValue.arrayRemove(methodMap)
+            )
+            db.collection("users").document(uid).set(updatePayload, SetOptions.merge()).await()
+            if (methodId.isNotBlank()) {
+                db.collection("users").document(uid).collection("payment_methods").document(methodId).delete().await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
     suspend fun recordAdminRevenueFee(
         feeAmount: Long = 10L,
         transferAmount: Long,
