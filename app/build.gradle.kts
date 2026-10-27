@@ -116,7 +116,8 @@ dependencies {
   // implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
   // implementation(libs.converter.moshi)
-  implementation(libs.firebase.ai)
+  // Google Gemini API SDK:
+  implementation(libs.google.generativeai)
   // Firestore and Firebase Auth with Credential Manager:
   implementation(libs.firebase.firestore)
   implementation(libs.firebase.auth)
@@ -126,8 +127,6 @@ dependencies {
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
   implementation(libs.play.services.auth)
-  implementation(libs.firebase.appcheck.recaptcha)
-  implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)

@@ -3,9 +3,8 @@ package com.example.service
 import android.util.Log
 import com.example.BuildConfig
 import com.example.model.ChatMessage
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.content
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.content
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,8 +20,18 @@ import java.util.concurrent.TimeUnit
 object ConnectNpAiService {
 
     private const val TAG = "ConnectNpAiService"
-    // Latest supported general-use Gemini 3 model per AI Studio guidelines
-    const val MODEL_NAME = "gemini-3.8-flash"
+
+    // =========================================================================================
+    // 🔑 PASTE YOUR GOOGLE GEMINI API KEY HERE
+    // You can paste your Gemini API key from Google AI Studio (https://aistudio.google.com/app/apikey)
+    // directly into MANUAL_GEMINI_API_KEY below.
+    // If left empty, it will automatically read from the AI Studio Secrets panel / BuildConfig.GEMINI_API_KEY.
+    // =========================================================================================
+    const val MANUAL_GEMINI_API_KEY: String = "" // <-- PASTE YOUR GEMINI API KEY HERE (e.g., "AIzaSy...")
+    // =========================================================================================
+
+    // Gemini model: gemini-2.5-flash / gemini-3.8-flash
+    const val MODEL_NAME = "gemini-2.5-flash"
     private const val GEMINI_ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL_NAME:generateContent"
 
@@ -39,82 +48,96 @@ object ConnectNpAiService {
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    // Lazily evaluate Firebase AI Logic generative model
-    private val firebaseAiModel by lazy {
-        try {
-            Firebase.ai.generativeModel(
-                modelName = MODEL_NAME,
-                systemInstruction = content { text(SYSTEM_PROMPT) }
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Firebase AI model initialization: ${e.message}")
+    /**
+     * Resolves the Gemini API key by checking the manual constant first,
+     * then BuildConfig (AI Studio Secrets panel), then environment variables.
+     */
+    fun getResolvedApiKey(): String {
+        if (MANUAL_GEMINI_API_KEY.isNotBlank() && MANUAL_GEMINI_API_KEY != "PASTE_YOUR_KEY_HERE") {
+            return MANUAL_GEMINI_API_KEY.trim()
+        }
+        val buildKey = try {
+            BuildConfig.GEMINI_API_KEY
+        } catch (_: Exception) {
+            ""
+        }
+        if (buildKey.isNotBlank() && buildKey != "MY_GEMINI_API_KEY") {
+            return buildKey.trim()
+        }
+        val envKey = try {
+            System.getenv("GEMINI_API_KEY")
+        } catch (_: Exception) {
             null
         }
+        return envKey?.takeIf { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }?.trim() ?: ""
     }
 
     /**
-     * Generates a smart conversational AI response by connecting to the Google Gemini API.
+     * Generates a smart conversational AI response by calling the Google Gemini API directly using an API key.
      * Passes the entire multi-turn conversation history for rich contextual understanding.
-     * Uses Firebase AI Logic with App Check as primary, with direct Gemini REST API and
-     * intelligent contextual engine fallbacks.
      */
     suspend fun getAiResponseWithHistory(
         history: List<ChatMessage>,
         newPrompt: String
     ): String = withContext(Dispatchers.IO) {
-        // 1. Primary: Firebase AI Logic (App Check attestation enabled)
+        val apiKey = getResolvedApiKey()
+
+        if (apiKey.isBlank()) {
+            Log.w(TAG, "No Gemini API key found in MANUAL_GEMINI_API_KEY or BuildConfig.GEMINI_API_KEY")
+            return@withContext "⚠️ Google Gemini API Key Required:\n\nPlease paste your Gemini API key into MANUAL_GEMINI_API_KEY at the top of ConnectNpAiService.kt, or add GEMINI_API_KEY in the AI Studio Secrets panel.\n\nYou can get a free API key at: https://aistudio.google.com/app/apikey"
+        }
+
+        // 1. Primary: Official Google Generative AI Client SDK
         try {
-            val model = firebaseAiModel
-            if (model != null) {
-                val relevantHistory = history.takeLast(20).filter { it.text.isNotBlank() }
-                val formattedHistory = relevantHistory.map { msg ->
-                    content(role = if (msg.isFromMe) "user" else "model") {
-                        text(msg.text)
-                    }
+            val generativeModel = GenerativeModel(
+                modelName = MODEL_NAME,
+                apiKey = apiKey,
+                systemInstruction = content { text(SYSTEM_PROMPT) }
+            )
+
+            val relevantHistory = history.takeLast(20).filter { it.text.isNotBlank() }
+            val formattedHistory = relevantHistory.map { msg ->
+                content(role = if (msg.isFromMe) "user" else "model") {
+                    text(msg.text)
                 }
-                val responseText = withTimeout(40_000L) {
-                    val chat = model.startChat(history = formattedHistory)
-                    val response = chat.sendMessage(newPrompt)
-                    response.text
-                }
-                if (!responseText.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully received response from Firebase AI Logic ($MODEL_NAME)")
-                    return@withContext responseText.trim()
-                }
+            }
+
+            val responseText = withTimeout(40_000L) {
+                val chat = generativeModel.startChat(history = formattedHistory)
+                val response = chat.sendMessage(newPrompt)
+                response.text
+            }
+
+            if (!responseText.isNullOrBlank()) {
+                Log.d(TAG, "Successfully received response from Google Generative AI SDK ($MODEL_NAME)")
+                return@withContext responseText.trim()
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Firebase AI Logic inference note: ${e.message}")
+            Log.w(TAG, "Google Generative AI SDK call failed, trying direct REST: ${e.message}")
         }
 
-        // 2. Secondary: Direct Google Gemini REST API with gemini-3.8-flash and multi-turn context
-        val apiKey = try {
-            BuildConfig.GEMINI_API_KEY
-        } catch (_: Exception) {
-            ""
-        }
-
-        if (!apiKey.isNullOrBlank() && apiKey != "MY_GEMINI_API_KEY") {
-            try {
-                val restResponse = callGeminiWithHistory(apiKey, history, newPrompt)
-                if (!restResponse.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully received response from direct Gemini REST API ($MODEL_NAME)")
-                    return@withContext restResponse.trim()
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Direct Gemini REST API call note: ${e.message}")
+        // 2. Secondary: Direct Google Gemini REST API with multi-turn history
+        try {
+            val restResponse = callGeminiWithHistory(apiKey, history, newPrompt)
+            if (!restResponse.isNullOrBlank()) {
+                Log.d(TAG, "Successfully received response from direct Gemini REST API ($MODEL_NAME)")
+                return@withContext restResponse.trim()
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Direct Gemini REST API failed: ${e.message}", e)
+            return@withContext "Error connecting to Google Gemini API: ${e.message ?: "Request failed"}. Please check your API key and network connection."
         }
 
-        // 3. Fallback: Multi-turn contextual engine preserving full history
+        // 3. Fallback
         generateContextAwareFallback(history, newPrompt)
     }
 
     /**
-     * Calls Google Gemini generateContent REST API with multi-turn chat history.
+     * Direct HTTP call to the Google Gemini generateContent REST endpoint with multi-turn chat history.
      */
     fun callGeminiWithHistory(
         apiKey: String,
@@ -179,7 +202,12 @@ object ConnectNpAiService {
         if (!response.isSuccessful) {
             val errBody = response.body?.string()
             Log.w(TAG, "Gemini HTTP error ${response.code}: $errBody")
-            return null
+            val errorMsg = try {
+                JSONObject(errBody ?: "").optJSONObject("error")?.optString("message") ?: "HTTP ${response.code}"
+            } catch (_: Exception) {
+                "HTTP ${response.code}"
+            }
+            throw IllegalStateException("Gemini API error ($errorMsg)")
         }
 
         val respString = response.body?.string() ?: return null
