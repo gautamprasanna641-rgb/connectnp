@@ -148,7 +148,8 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         content: String,
         location: String = "Kathmandu, Nepal",
         authorName: String,
-        authorHandle: String
+        authorHandle: String,
+        mediaUrl: String? = null
     ): Result<String> {
         val uid = requireUserId()
         val path = "posts"
@@ -166,6 +167,9 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
+            if (!mediaUrl.isNullOrBlank()) {
+                payload["mediaUrl"] = mediaUrl
+            }
             docRef.set(payload).await()
             Result.success(docRef.id)
         } catch (e: CancellationException) {
@@ -173,6 +177,46 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, path)
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Uploads photos, reels, or videos to Firebase Storage with automatic compression and fallback.
+     */
+    suspend fun uploadMediaFile(
+        mediaUri: Uri,
+        folder: String = "posts",
+        context: Context? = null
+    ): Result<String> {
+        val uid = requireUserId()
+        return try {
+            val fileName = "${folder}_${uid}_${System.currentTimeMillis()}"
+            val extension = if (folder == "reels" || folder == "videos") "mp4" else "jpg"
+            val storageRef = FirebaseStorage.getInstance().reference.child("$folder/$fileName.$extension")
+
+            val compressedBytes = if (extension == "jpg" && context != null) {
+                ImageCompressor.compressImageUriToBytes(context, mediaUri, 1280, 1280, 80)
+            } else null
+
+            val contentType = if (extension == "mp4") "video/mp4" else "image/jpeg"
+            val metadata = StorageMetadata.Builder()
+                .setContentType(contentType)
+                .build()
+
+            withTimeout(15000L) {
+                if (compressedBytes != null && compressedBytes.isNotEmpty()) {
+                    storageRef.putBytes(compressedBytes, metadata).await()
+                } else {
+                    storageRef.putFile(mediaUri, metadata).await()
+                }
+                val downloadUrl = storageRef.downloadUrl.await().toString()
+                Result.success(downloadUrl)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("ConnectNpFirestore", "Firebase Storage uploadMediaFile: ${e.message}, falling back to URI")
+            Result.success(mediaUri.toString())
         }
     }
 

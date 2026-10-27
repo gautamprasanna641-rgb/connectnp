@@ -80,6 +80,10 @@
           "type": "string",
           "description": "Tagged location in Nepal"
         },
+        "mediaUrl": {
+          "type": "string",
+          "description": "Firebase Storage or image URL for photo/video attachment"
+        },
         "likesCount": {
           "type": "integer",
           "description": "Number of reactions"

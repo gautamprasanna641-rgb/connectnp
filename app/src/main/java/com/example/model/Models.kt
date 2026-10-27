@@ -86,6 +86,7 @@ data class Story(
     val id: String,
     val author: User,
     val mediaResId: Int? = null,
+    val mediaUrl: String? = null,
     val caption: String = "",
     val timestamp: String = "2h ago",
     val isViewed: Boolean = false,
@@ -102,6 +103,7 @@ data class Reel(
     val sharesCount: Int,
     val isLiked: Boolean = false,
     val isSaved: Boolean = false,
+    val videoUrl: String? = null,
     val videoGradientColors: List<Long> = listOf(0xFF1877F2, 0xFFDC143C)
 )
 
@@ -154,6 +156,7 @@ data class WatchVideo(
     val likesCount: String,
     val isSubscribed: Boolean = false,
     val imageResId: Int? = null,
+    val videoUrl: String? = null,
     val tags: List<String> = emptyList()
 )
 

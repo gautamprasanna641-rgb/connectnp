@@ -397,7 +397,17 @@ fun StoriesSection(
                         .clickable { onStoryClick(index) }
                         .testTag("story_card_$index")
                 ) {
-                    if (story.mediaResId != null) {
+                    if (!story.mediaUrl.isNullOrBlank()) {
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(story.mediaUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = story.caption,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else if (story.mediaResId != null) {
                         Image(
                             painter = painterResource(id = story.mediaResId),
                             contentDescription = story.caption,

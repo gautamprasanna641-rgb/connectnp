@@ -673,12 +673,13 @@ object ConnectNpRepository {
         }
     }
 
-    fun addStory(caption: String) {
+    fun addStory(caption: String, mediaUri: android.net.Uri? = null) {
         val newStory = Story(
             id = "story_${System.currentTimeMillis()}",
             author = getCurrentActiveUser(),
             caption = caption,
-            mediaResId = R.drawable.himalaya_banner_1792096400169,
+            mediaResId = if (mediaUri == null) R.drawable.himalaya_banner_1792096400169 else null,
+            mediaUrl = mediaUri?.toString(),
             timestamp = "Just now",
             isViewed = false
         )
@@ -713,6 +714,52 @@ object ConnectNpRepository {
         _reels.value = _reels.value.map { reel ->
             if (reel.id == reelId) reel.copy(isSaved = !reel.isSaved) else reel
         }
+    }
+
+    fun addReel(
+        title: String,
+        soundTitle: String = "Trending Sound • Nepal",
+        videoUri: android.net.Uri? = null,
+        customAuthor: User? = null
+    ): Reel {
+        val author = customAuthor ?: getCurrentActiveUser()
+        val newReel = Reel(
+            id = "reel_${System.currentTimeMillis()}",
+            creator = author,
+            title = title,
+            soundTitle = soundTitle,
+            likesCount = 1,
+            commentsCount = 0,
+            sharesCount = 0,
+            isLiked = false,
+            videoUrl = videoUri?.toString()
+        )
+        _reels.value = listOf(newReel) + _reels.value
+        return newReel
+    }
+
+    fun addWatchVideo(
+        title: String,
+        description: String = "",
+        category: String = "Community",
+        videoUri: android.net.Uri? = null,
+        customAuthor: User? = null
+    ): WatchVideo {
+        val author = customAuthor ?: getCurrentActiveUser()
+        val newVideo = WatchVideo(
+            id = "video_${System.currentTimeMillis()}",
+            title = title,
+            channel = author,
+            views = "1 view",
+            timeAgo = "Just now",
+            duration = "0:45",
+            description = description,
+            likesCount = "1",
+            videoUrl = videoUri?.toString(),
+            tags = listOf(category, "Nepal", "ConnectNP")
+        )
+        _watchVideos.value = listOf(newVideo) + _watchVideos.value
+        return newVideo
     }
 
     // --- Chat Logic ---

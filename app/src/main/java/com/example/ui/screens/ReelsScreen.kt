@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.net.Uri
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,13 +23,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.model.Reel
 import com.example.ui.theme.ConnectNpBlue
 import com.example.ui.theme.NepalCrimson
+import com.example.util.MediaPickerType
+import com.example.util.rememberGalleryLauncher
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,10 +44,12 @@ fun ReelsScreen(
     reels: List<Reel>,
     isNepali: Boolean,
     onToggleLike: (String) -> Unit,
-    onToggleSave: (String) -> Unit
+    onToggleSave: (String) -> Unit,
+    onCreateReel: ((title: String, soundTitle: String, videoUri: Uri?) -> Unit)? = null
 ) {
     val listState = rememberLazyListState()
     var activeCommentReelId by remember { mutableStateOf<String?>(null) }
+    var showCreateReelDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -47,18 +57,62 @@ fun ReelsScreen(
             .background(Color.Black)
             .testTag("reels_screen")
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            itemsIndexed(reels, key = { _, reel -> reel.id }) { index, reel ->
-                ReelPageItem(
-                    reel = reel,
-                    isNepali = isNepali,
-                    onToggleLike = { onToggleLike(reel.id) },
-                    onToggleSave = { onToggleSave(reel.id) },
-                    onOpenComments = { activeCommentReelId = reel.id }
-                )
+        if (reels.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VideoCameraBack,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = if (isNepali) "कुनै रिल्स फेला परेन" else "No Reels Yet",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (isNepali) "पहिलो रिल अपलोड गर्नुहोस् र ट्रेन्ड सुरु गर्नुहोस्!"
+                               else "Be the first to upload a Reel and start a trend!",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { showCreateReelDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isNepali) "रिल बनाउनुहोस्" else "Create Reel")
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                itemsIndexed(reels, key = { _, reel -> reel.id }) { index, reel ->
+                    ReelPageItem(
+                        reel = reel,
+                        isNepali = isNepali,
+                        onToggleLike = { onToggleLike(reel.id) },
+                        onToggleSave = { onToggleSave(reel.id) },
+                        onOpenComments = { activeCommentReelId = reel.id }
+                    )
+                }
             }
         }
 
@@ -93,7 +147,10 @@ fun ReelsScreen(
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = {}) {
+                IconButton(
+                    onClick = { showCreateReelDialog = true },
+                    modifier = Modifier.testTag("create_reel_button")
+                ) {
                     Icon(
                         imageVector = Icons.Default.CameraAlt,
                         contentDescription = "Create Reel",
@@ -131,6 +188,17 @@ fun ReelsScreen(
             }
         }
     }
+
+    if (showCreateReelDialog) {
+        CreateReelDialog(
+            isNepali = isNepali,
+            onDismiss = { showCreateReelDialog = false },
+            onSubmitReel = { title, soundTitle, videoUri ->
+                onCreateReel?.invoke(title, soundTitle, videoUri)
+                showCreateReelDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -160,16 +228,56 @@ fun LazyItemScope.ReelPageItem(
             .fillMaxWidth()
             .clickable { isPlaying = !isPlaying }
     ) {
-        // Dynamic Video Simulation Background
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        reel.videoGradientColors.map { Color(it) }
+        // Dynamic Video Media / Simulation Background
+        if (!reel.videoUrl.isNullOrBlank()) {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(reel.videoUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = reel.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                loading = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    reel.videoGradientColors.map { Color(it) }
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                },
+                error = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    reel.videoGradientColors.map { Color(it) }
+                                )
+                            )
                     )
-                )
-        )
+                }
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            reel.videoGradientColors.map { Color(it) }
+                        )
+                    )
+            )
+        }
 
         // Overlay scrim
         Box(
@@ -399,6 +507,225 @@ fun LazyItemScope.ReelPageItem(
                     fontSize = 11.sp,
                     maxLines = 1
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun CreateReelDialog(
+    isNepali: Boolean,
+    onDismiss: () -> Unit,
+    onSubmitReel: (title: String, soundTitle: String, videoUri: Uri?) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var soundTitle by remember { mutableStateOf("Trending Sound • Nepal") }
+    var selectedVideoUri by remember { mutableStateOf<Uri?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
+
+    val videoPickerLauncher = rememberGalleryLauncher(
+        pickerType = MediaPickerType.VIDEO_ONLY,
+        onMediaSelected = { uri ->
+            selectedVideoUri = uri
+        }
+    )
+
+    Dialog(onDismissRequest = { if (!isUploading) onDismiss() }) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp)
+                .testTag("create_reel_dialog")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isNepali) "नयाँ रिल सिर्जना गर्नुहोस्" else "Create ConnectNP Reel",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    IconButton(onClick = onDismiss, enabled = !isUploading) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Video Picker Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .clickable(enabled = !isUploading) { videoPickerLauncher.launch() }
+                        .testTag("pick_reel_video_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selectedVideoUri != null)
+                            NepalCrimson.copy(alpha = 0.08f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (selectedVideoUri != null) NepalCrimson else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+                ) {
+                    if (selectedVideoUri != null) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            SubcomposeAsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(selectedVideoUri)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Selected Reel Video",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Black.copy(alpha = 0.75f),
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isNepali) "भिडियो चयन गरियो (परिवर्तन गर्न थिच्नुहोस्)" else "Video Selected (Tap to change)",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VideoLibrary,
+                                contentDescription = null,
+                                tint = NepalCrimson,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (isNepali) "ग्यालरीबाट भिडियो छान्नुहोस्" else "Select Video from Gallery",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isNepali) "MP4, MOV वा HD भिडियो" else "MP4, MOV or HD Video Reel",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Reel Caption / Title
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(if (isNepali) "शीर्षक / क्याप्सन" else "Caption / Title") },
+                    placeholder = { Text(if (isNepali) "केहि रमाइलो लेख्नुहोस्... #Nepal #Vibes" else "Describe your reel... #Nepal #Trending") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("reel_caption_input"),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !isUploading,
+                    singleLine = false,
+                    maxLines = 3
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Sound / Audio Title
+                OutlinedTextField(
+                    value = soundTitle,
+                    onValueChange = { soundTitle = it },
+                    label = { Text(if (isNepali) "ध्वनि / संगीत" else "Audio Track / Sound") },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.MusicNote, contentDescription = null, tint = NepalCrimson)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("reel_sound_input"),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !isUploading,
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Actions
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isUploading
+                    ) {
+                        Text(if (isNepali) "रद्द गर्नुहोस्" else "Cancel")
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = {
+                            if (title.isNotBlank() || selectedVideoUri != null) {
+                                isUploading = true
+                                val finalTitle = title.ifBlank { "ConnectNP Reel Vibes" }
+                                onSubmitReel(finalTitle, soundTitle, selectedVideoUri)
+                            }
+                        },
+                        enabled = !isUploading && (title.isNotBlank() || selectedVideoUri != null),
+                        colors = ButtonDefaults.buttonColors(containerColor = NepalCrimson),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("submit_reel_button")
+                    ) {
+                        if (isUploading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(if (isNepali) "रिल पोस्ट गर्नुहोस्" else "Post Reel")
+                    }
+                }
             }
         }
     }

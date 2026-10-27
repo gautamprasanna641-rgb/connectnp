@@ -329,7 +329,26 @@ fun ConnectNpMainApp(
                             reels = reels,
                             isNepali = isNepali,
                             onToggleLike = { ConnectNpRepository.toggleReelLike(it, context) },
-                            onToggleSave = { ConnectNpRepository.toggleReelSave(it) }
+                            onToggleSave = { ConnectNpRepository.toggleReelSave(it) },
+                            onCreateReel = { title, soundTitle, videoUri ->
+                                ConnectNpRepository.addReel(
+                                    title = title,
+                                    soundTitle = soundTitle,
+                                    videoUri = videoUri
+                                )
+                                if (videoUri != null) {
+                                    coroutineScope.launch {
+                                        try {
+                                            val repo = ConnectNpFirestoreRepository(context)
+                                            val uploadRes = repo.uploadMediaFile(videoUri, "reels", context)
+                                            val downloadUrl = uploadRes.getOrNull()
+                                            Log.d("MainActivity", "Reel uploaded to Firebase Storage: $downloadUrl")
+                                        } catch (e: Exception) {
+                                            Log.w("MainActivity", "Reel upload warning: ${e.message}")
+                                        }
+                                    }
+                                }
+                            }
                         )
                     }
                     NavigationTab.CHATS -> {
@@ -380,7 +399,27 @@ fun ConnectNpMainApp(
                         WatchScreen(
                             videos = watchVideos,
                             isNepali = isNepali,
-                            onToggleSubscribe = { ConnectNpRepository.toggleSubscribe(it) }
+                            onToggleSubscribe = { ConnectNpRepository.toggleSubscribe(it) },
+                            onUploadVideo = { title, description, category, videoUri ->
+                                ConnectNpRepository.addWatchVideo(
+                                    title = title,
+                                    description = description,
+                                    category = category,
+                                    videoUri = videoUri
+                                )
+                                if (videoUri != null) {
+                                    coroutineScope.launch {
+                                        try {
+                                            val repo = ConnectNpFirestoreRepository(context)
+                                            val uploadRes = repo.uploadMediaFile(videoUri, "videos", context)
+                                            val downloadUrl = uploadRes.getOrNull()
+                                            Log.d("MainActivity", "Video uploaded to Firebase Storage: $downloadUrl")
+                                        } catch (e: Exception) {
+                                            Log.w("MainActivity", "Video upload warning: ${e.message}")
+                                        }
+                                    }
+                                }
+                            }
                         )
                     }
                     NavigationTab.HUB -> {
@@ -431,11 +470,17 @@ fun ConnectNpMainApp(
                 coroutineScope.launch {
                     try {
                         val repo = ConnectNpFirestoreRepository(context)
+                        val uploadedMediaUrl = if (mediaUri != null) {
+                            val uploadRes = repo.uploadMediaFile(mediaUri, "posts", context)
+                            uploadRes.getOrNull() ?: mediaUri.toString()
+                        } else null
+
                         repo.createPost(
                             content = content,
                             location = location ?: "Kathmandu, Nepal",
                             authorName = activeUser.name,
-                            authorHandle = activeUser.handle
+                            authorHandle = activeUser.handle,
+                            mediaUrl = uploadedMediaUrl
                         )
                     } catch (e: Exception) {
                         Log.w("MainActivity", "Firestore post error: ${e.message}")

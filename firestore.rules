@@ -54,6 +54,7 @@ service cloud.firestore {
              data.content is string && data.content.size() >= 1 && data.content.size() <= 5000 &&
              (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
              (!('location' in data) || (data.location is string && data.location.size() <= 100)) &&
+             (!('mediaUrl' in data) || (data.mediaUrl is string && data.mediaUrl.size() <= 2000)) &&
              (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
              (!('commentsCount' in data) || (data.commentsCount is int && data.commentsCount >= 0)) &&
              (!('sharesCount' in data) || (data.sharesCount is int && data.sharesCount >= 0)) &&
@@ -132,7 +133,7 @@ service cloud.firestore {
                        incoming().userId == request.auth.uid &&
                        (!('isPagePost' in incoming()) || incoming().isPagePost == false || isAdmin()) &&
                        incoming().keys().hasAll(['userId', 'authorName', 'authorHandle', 'content', 'createdAt']) &&
-                       incoming().keys().hasOnly(['id', 'userId', 'authorName', 'authorHandle', 'content', 'location', 'likesCount', 'commentsCount', 'sharesCount', 'isPagePost', 'pageId', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['id', 'userId', 'authorName', 'authorHandle', 'content', 'location', 'mediaUrl', 'likesCount', 'commentsCount', 'sharesCount', 'isPagePost', 'pageId', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        isValidPost(incoming());
@@ -142,7 +143,7 @@ service cloud.firestore {
                        incoming().userId == existing().userId &&
                        incoming().createdAt == existing().createdAt &&
                        isValidPost(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['content', 'location', 'likesCount', 'commentsCount', 'sharesCount', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['content', 'location', 'mediaUrl', 'likesCount', 'commentsCount', 'sharesCount', 'updatedAt']);
       allow delete: if isSignedIn() && isValidId(postId) && (existing().userId == request.auth.uid || isAdmin());
 
       match /comments/{commentId} {
@@ -206,5 +207,27 @@ service cloud.firestore {
         allow create: if isSignedIn() && isValidId(feeId);
       }
     }
+  
+    function isValidReel(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             (!('caption' in data) || (data.caption is string && data.caption.size() <= 1000)) &&
+             (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() <= 2000)) &&
+             (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0));
+    }
+
+    match /reels/{reelId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(reelId) && incoming().userId == request.auth.uid && isValidReel(incoming());
+      allow update: if isSignedIn() && isValidId(reelId) && existing().userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(reelId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    match /videos/{videoId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(videoId) && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(videoId) && existing().userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(videoId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
   }
 }

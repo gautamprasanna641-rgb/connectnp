@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.R
 import com.example.model.Story
 import com.example.ui.theme.ConnectNpBlue
@@ -71,7 +74,31 @@ fun StoryViewerDialog(
                 .testTag("story_viewer_dialog")
         ) {
             // Background Image or Gradient
-            if (currentStory.mediaResId != null) {
+            if (!currentStory.mediaUrl.isNullOrBlank()) {
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(currentStory.mediaUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = currentStory.caption,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Dark tint overlay for readability
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Black.copy(alpha = 0.6f),
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                )
+            } else if (currentStory.mediaResId != null) {
                 Image(
                     painter = painterResource(id = currentStory.mediaResId),
                     contentDescription = currentStory.caption,
