@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "147110426467",
+    "project_id": "connectnp-1c76c",
+    "storage_bucket": "connectnp-1c76c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:147110426467:android:52f07ab7564a79bd250556",
+        "android_client_info": {
+          "package_name": "com.aistudio.connectnp.vkmz"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "147110426467-kk813lluoa4v9naim26lv8erhh4duphh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.connectnp.vkmz",
+            "certificate_hash": "a1bd5ac26da068e6a019663c828460f1f223a7eb"
+          }
+        },
+        {
+          "client_id": "147110426467-3en8bds1jq59g2majbg2jaakva2uv1qf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzPAhm4IhQvABkOOMLNBa4HxnbIoHo9ZU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "147110426467-3en8bds1jq59g2majbg2jaakva2uv1qf.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
