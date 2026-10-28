@@ -46,9 +46,11 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.messaging.FirebaseMessaging
+import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,6 +120,19 @@ fun ConnectNpMainApp(
     val context = LocalContext.current
     val firestoreRepo = remember(context) { ConnectNpFirestoreRepository(context) }
     val authUser = Firebase.auth.currentUser
+    var isEmailVerified by remember(authUser?.uid) {
+        mutableStateOf(authUser?.isEmailVerified == true || ConnectNpRepository.isUserAdmin(authUser?.email))
+    }
+
+    LaunchedEffect(authUser?.uid) {
+        try {
+            authUser?.reload()?.await()
+            if (authUser?.isEmailVerified == true) {
+                isEmailVerified = true
+            }
+        } catch (_: Exception) {}
+    }
+
     val userProfileDoc by remember(authUser?.uid) {
         firestoreRepo.observeUserProfile(authUser?.uid)
     }.collectAsStateWithLifecycle(initialValue = null)
@@ -300,37 +315,48 @@ fun ConnectNpMainApp(
             } else {
                 when (currentTab) {
                     NavigationTab.FEED -> {
-                        FeedScreen(
-                            posts = posts,
-                            stories = stories,
-                            isNepali = isNepali,
-                            currentUser = currentActiveUser,
-                            onStoryClick = { index -> activeStoryIndex = index },
-                            onAddStoryClick = {
-                                ConnectNpRepository.addStory("Loving ConnectNP Super-App vibes! 🇳🇵✨")
-                                activeStoryIndex = 0
-                            },
-                            onCreatePostClick = { showCreatePostDialog = true },
-                            onToggleReaction = { postId, reaction ->
-                                ConnectNpRepository.toggleReaction(postId, reaction, context)
-                            },
-                            onVotePoll = { postId, optId ->
-                                ConnectNpRepository.votePoll(postId, optId)
-                            },
-                            onToggleBookmark = { postId ->
-                                ConnectNpRepository.toggleBookmark(postId)
-                            },
-                            onAddComment = { postId, text ->
-                                ConnectNpRepository.addComment(postId, text)
-                            },
-                            onSharePost = { postId ->
-                                ConnectNpRepository.incrementShareCount(postId)
-                            },
-                            onOpenSearch = { showSearchDialog = true },
-                            onNavigateToMarketplace = { currentTab = NavigationTab.MARKETPLACE },
-                            onNavigateToReels = { currentTab = NavigationTab.REELS },
-                            onLoadMorePosts = { ConnectNpRepository.loadMorePosts(context) }
-                        )
+                        if (!isEmailVerified) {
+                            EmailVerificationScreen(
+                                user = authUser,
+                                isNepali = isNepali,
+                                onEmailVerified = {
+                                    isEmailVerified = true
+                                },
+                                onSignOut = onSignOutUser
+                            )
+                        } else {
+                            FeedScreen(
+                                posts = posts,
+                                stories = stories,
+                                isNepali = isNepali,
+                                currentUser = currentActiveUser,
+                                onStoryClick = { index -> activeStoryIndex = index },
+                                onAddStoryClick = {
+                                    ConnectNpRepository.addStory("Loving ConnectNP Super-App vibes! 🇳🇵✨")
+                                    activeStoryIndex = 0
+                                },
+                                onCreatePostClick = { showCreatePostDialog = true },
+                                onToggleReaction = { postId, reaction ->
+                                    ConnectNpRepository.toggleReaction(postId, reaction, context)
+                                },
+                                onVotePoll = { postId, optId ->
+                                    ConnectNpRepository.votePoll(postId, optId)
+                                },
+                                onToggleBookmark = { postId ->
+                                    ConnectNpRepository.toggleBookmark(postId)
+                                },
+                                onAddComment = { postId, text ->
+                                    ConnectNpRepository.addComment(postId, text)
+                                },
+                                onSharePost = { postId ->
+                                    ConnectNpRepository.incrementShareCount(postId)
+                                },
+                                onOpenSearch = { showSearchDialog = true },
+                                onNavigateToMarketplace = { currentTab = NavigationTab.MARKETPLACE },
+                                onNavigateToReels = { currentTab = NavigationTab.REELS },
+                                onLoadMorePosts = { ConnectNpRepository.loadMorePosts(context) }
+                            )
+                        }
                     }
                     NavigationTab.REELS -> {
                         ReelsScreen(
@@ -483,10 +509,19 @@ fun ConnectNpMainApp(
 
     // Create Post Dialog
     if (showCreatePostDialog) {
-        CreatePostDialog(
-            isNepali = isNepali,
-            currentUser = currentActiveUser,
-            onDismiss = { showCreatePostDialog = false },
+        if (!isEmailVerified) {
+            showCreatePostDialog = false
+            Toast.makeText(
+                context,
+                if (isNepali) "फिडमा पोस्ट गर्नका लागि कृपया आफ्नो इमेल प्रमाणीकरण गर्नुहोस्"
+                else "Please verify your email address to create posts",
+                Toast.LENGTH_LONG
+            ).show()
+        } else {
+            CreatePostDialog(
+                isNepali = isNepali,
+                currentUser = currentActiveUser,
+                onDismiss = { showCreatePostDialog = false },
             onSubmitPost = { content, location, mediaResId, mediaUri ->
                 val activeUser = ConnectNpRepository.getCurrentActiveUser()
                 // Instant optimistic appearance in Feed & local cache
@@ -526,6 +561,7 @@ fun ConnectNpMainApp(
                 }
             }
         )
+        }
     }
 
     // User Search Dialog (TASK 3)

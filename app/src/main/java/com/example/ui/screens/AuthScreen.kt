@@ -786,9 +786,17 @@ private fun RegisterContent(
                             } catch (e: Exception) {
                                 Log.w("Auth", "Failed to save initial Firestore profile: ${e.message}")
                             }
+
+                            // Send verification email to new user immediately (Requirement #1)
+                            try {
+                                it.sendEmailVerification().await()
+                                Log.d("Auth", "Verification email sent to $cleanEmail")
+                            } catch (e: Exception) {
+                                Log.w("Auth", "Failed to send verification email: ${e.message}")
+                            }
                         }
 
-                        Toast.makeText(context, "Account created! Welcome to CONNECTNP", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Account created! Verification email sent to $cleanEmail", Toast.LENGTH_LONG).show()
                         onAuthSuccess()
                     } catch (e: Exception) {
                         Log.e("Auth", "Registration error: ${e.message}", e)
