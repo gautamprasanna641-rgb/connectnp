@@ -143,8 +143,11 @@ data class MarketItem(
     val imageResId: Int? = null,
     val imageUrl: String? = null,
     val description: String,
-    val isFeatured: Boolean = false
+    val isFeatured: Boolean = false,
+    val isSold: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
 )
+
 
 data class WatchVideo(
     val id: String,

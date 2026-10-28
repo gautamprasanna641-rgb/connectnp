@@ -253,7 +253,7 @@ object ConnectNpRepository {
     private val _isAiThinking = MutableStateFlow(false)
     val isAiThinking: StateFlow<Boolean> = _isAiThinking.asStateFlow()
 
-    private val _marketItems = MutableStateFlow<List<MarketItem>>(emptyList())
+    private val _marketItems = MutableStateFlow<List<MarketItem>>(SampleDataProvider.getInitialMarketItems())
     val marketItems: StateFlow<List<MarketItem>> = _marketItems.asStateFlow()
 
     private val _watchVideos = MutableStateFlow<List<WatchVideo>>(emptyList())
