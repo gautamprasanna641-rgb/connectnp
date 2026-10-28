@@ -26,12 +26,24 @@ object ConnectNpAiService {
     private const val GEMINI_ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL_NAME:generateContent"
 
-    const val SYSTEM_PROMPT =
-        "You are ConnectNP AI, the friendly, intelligent bilingual assistant for ConnectNP (Nepal's premier social and fintech super-app). " +
-        "You communicate warmly and naturally in English, Nepali (नेपाली), or romanized Nepali. " +
-        "You maintain complete conversational memory across previous turns. " +
-        "Provide culturally authentic, concise, and helpful advice regarding travel in Nepal (Himalayan treks like Annapurna, Everest, Langtang, permits, seasons, weather), " +
-        "Nepali cuisine & culture (momo, dal bhat, Newari dishes), ConnectNP community features, and ConnectNP Pay wallet and escrow services."
+    fun buildSystemPrompt(isNepali: Boolean): String {
+        return if (isNepali) {
+            "You are ConnectNP AI, the friendly, intelligent bilingual assistant for ConnectNP (Nepal's premier social and fintech super-app). " +
+            "The user's currently selected app language is NEPALI (नेपाली). " +
+            "CRITICAL SYSTEM INSTRUCTION: You MUST respond completely in natural, polite Nepali language (नेपाली भाषामा, देवनागरी लिपि). " +
+            "Use respectful Nepali tone and greetings (e.g., 'नमस्ते!', 'हजुर'). " +
+            "Maintain complete conversational memory across previous turns. " +
+            "Provide culturally authentic, helpful, and concise advice regarding travel in Nepal (Himalayan treks like Annapurna, Everest, Langtang, seasons, weather), " +
+            "Nepali cuisine & culture (momo, dal bhat, Newari dishes), ConnectNP community features, and ConnectNP Pay wallet and escrow services."
+        } else {
+            "You are ConnectNP AI, the friendly, intelligent bilingual assistant for ConnectNP (Nepal's premier social and fintech super-app). " +
+            "The user's currently selected app language is ENGLISH. " +
+            "CRITICAL SYSTEM INSTRUCTION: You MUST respond in natural, friendly, and concise English. " +
+            "Maintain complete conversational memory across previous turns. " +
+            "Provide culturally authentic, helpful, and concise advice regarding travel in Nepal (Himalayan treks like Annapurna, Everest, Langtang, permits, seasons, weather), " +
+            "Nepali cuisine & culture (momo, dal bhat, Newari dishes), ConnectNP community features, and ConnectNP Pay wallet and escrow services."
+        }
+    }
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -82,17 +94,22 @@ object ConnectNpAiService {
 
     /**
      * Generates a smart conversational AI response by calling the Google Gemini API directly using the Secrets API key.
-     * Passes the entire multi-turn conversation history for rich contextual understanding.
+     * Passes the user's selected language as a system instruction (Requirement #1) and retains conversational history.
      */
     suspend fun getAiResponseWithHistory(
         history: List<ChatMessage>,
-        newPrompt: String
+        newPrompt: String,
+        isNepali: Boolean = false
     ): String = withContext(Dispatchers.IO) {
         val apiKey = getResolvedApiKey()
+        val systemInstructionText = buildSystemPrompt(isNepali)
 
         if (apiKey.isBlank()) {
             Log.w(TAG, "No Gemini API key found in Secrets (MANUAL_GEMINI_API_KEY or GEMINI_API_KEY)")
-            return@withContext "⚠️ Google Gemini API Key Required:\n\nPlease ensure your Gemini API key is configured in the AI Studio Secrets panel under 'MANUAL_GEMINI_API_KEY' or 'GEMINI_API_KEY'.\n\nYou can get a free key at: https://aistudio.google.com/app/apikey"
+            return@withContext if (isNepali)
+                "⚠️ गुगल जेमिनी (Gemini) API की आवश्यक छ:\n\nकृपया AI Studio को Secrets खण्डमा 'MANUAL_GEMINI_API_KEY' वा 'GEMINI_API_KEY' प्रविष्ट गर्नुहोस्।"
+            else
+                "⚠️ Google Gemini API Key Required:\n\nPlease ensure your Gemini API key is configured in the AI Studio Secrets panel under 'MANUAL_GEMINI_API_KEY' or 'GEMINI_API_KEY'.\n\nYou can get a free key at: https://aistudio.google.com/app/apikey"
         }
 
         // 1. Primary: Official Google Generative AI Client SDK
@@ -100,7 +117,7 @@ object ConnectNpAiService {
             val generativeModel = GenerativeModel(
                 modelName = MODEL_NAME,
                 apiKey = apiKey,
-                systemInstruction = content { text(SYSTEM_PROMPT) }
+                systemInstruction = content { text(systemInstructionText) }
             )
 
             val relevantHistory = history.takeLast(20).filter { it.text.isNotBlank() }
@@ -117,7 +134,7 @@ object ConnectNpAiService {
             }
 
             if (!responseText.isNullOrBlank()) {
-                Log.d(TAG, "Successfully received response from Google Generative AI SDK ($MODEL_NAME)")
+                Log.d(TAG, "Successfully received response from Google Generative AI SDK ($MODEL_NAME, isNepali=$isNepali)")
                 return@withContext responseText.trim()
             }
         } catch (e: CancellationException) {
@@ -126,18 +143,21 @@ object ConnectNpAiService {
             Log.w(TAG, "Google Generative AI SDK call failed, trying direct REST: ${e.message}")
         }
 
-        // 2. Secondary: Direct Google Gemini REST API with multi-turn history
+        // 2. Secondary: Direct Google Gemini REST API with multi-turn history and system instruction
         try {
-            val restResponse = callGeminiWithHistory(apiKey, history, newPrompt)
+            val restResponse = callGeminiWithHistory(apiKey, history, newPrompt, systemInstructionText)
             if (!restResponse.isNullOrBlank()) {
-                Log.d(TAG, "Successfully received response from direct Gemini REST API ($MODEL_NAME)")
+                Log.d(TAG, "Successfully received response from direct Gemini REST API ($MODEL_NAME, isNepali=$isNepali)")
                 return@withContext restResponse.trim()
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Direct Gemini REST API failed: ${e.message}", e)
-            return@withContext "Error connecting to Google Gemini API: ${e.message ?: "Request failed"}. Please check your API key and network connection."
+            return@withContext if (isNepali)
+                "गुगल जेमिनी API मा जडान गर्दा त्रुटि भयो: ${e.message ?: "अनुरोध असफल"}"
+            else
+                "Error connecting to Google Gemini API: ${e.message ?: "Request failed"}. Please check your API key and network connection."
         }
 
         // 3. Fallback
@@ -150,7 +170,8 @@ object ConnectNpAiService {
     fun callGeminiWithHistory(
         apiKey: String,
         history: List<ChatMessage>,
-        newPrompt: String
+        newPrompt: String,
+        systemPrompt: String = buildSystemPrompt(false)
     ): String? {
         val jsonPayload = JSONObject().apply {
             put(
@@ -159,7 +180,7 @@ object ConnectNpAiService {
                     put(
                         "parts",
                         JSONArray().put(
-                            JSONObject().put("text", SYSTEM_PROMPT)
+                            JSONObject().put("text", systemPrompt)
                         )
                     )
                 }

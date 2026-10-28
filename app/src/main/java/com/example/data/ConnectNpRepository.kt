@@ -1086,8 +1086,9 @@ object ConnectNpRepository {
         _isAiThinking.value = true
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Generates contextual response maintaining all prior conversation turns via Gemini API
-                val reply = ConnectNpAiService.getAiResponseWithHistory(history, userPrompt)
+                // Generates contextual response maintaining all prior conversation turns via Gemini API in the user's selected language
+                val isNepali = _isNepaliLanguage.value
+                val reply = ConnectNpAiService.getAiResponseWithHistory(history, userPrompt, isNepali)
 
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
                     _isAiThinking.value = false

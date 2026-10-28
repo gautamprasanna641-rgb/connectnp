@@ -290,6 +290,16 @@ fun ActiveChatView(
     onSendMessage: (text: String, mediaType: MessageMediaType, audioDuration: Int?) -> Unit,
     onStartCall: (isVideo: Boolean) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val tts = remember(context) { com.example.util.ConnectNpTextToSpeech(context) }
+    val currentlySpeakingId by tts.currentlySpeakingMessageId.collectAsState()
+
+    DisposableEffect(tts) {
+        onDispose {
+            tts.shutdown()
+        }
+    }
+
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val isAiThinking by ConnectNpRepository.isAiThinking.collectAsStateWithLifecycle()
@@ -360,7 +370,8 @@ fun ActiveChatView(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (thread.isAiAssistant) "AI Companion • Always Active" else if (thread.isOnline) "Online • End-to-End Encrypted" else "Last seen recently",
+                        text = if (thread.isAiAssistant) (if (isNepali) "AI सहायक • नेपाली आवाज 🔊" else "AI Companion • English TTS 🔊")
+                               else if (thread.isOnline) "Online • End-to-End Encrypted" else "Last seen recently",
                         fontSize = 11.sp,
                         color = if (thread.isOnline || thread.isAiAssistant) ConnectNpSuccess else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -444,8 +455,16 @@ fun ActiveChatView(
                 .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(messages) { msg ->
-                ChatMessageBubble(msg = msg)
+            items(messages, key = { it.id }) { msg ->
+                val isAiMessage = !msg.isFromMe && (msg.senderId == "user_ai" || thread.isAiAssistant)
+                ChatMessageBubble(
+                    msg = msg,
+                    isAiMessage = isAiMessage,
+                    isSpeaking = currentlySpeakingId == msg.id,
+                    onToggleSpeak = if (isAiMessage && msg.text.isNotBlank()) {
+                        { tts.speak(msg.id, msg.text, isNepali) }
+                    } else null
+                )
             }
 
             // Real-time AI thinking indicator when Gemini is generating response
@@ -566,7 +585,12 @@ fun ActiveChatView(
 }
 
 @Composable
-fun ChatMessageBubble(msg: ChatMessage) {
+fun ChatMessageBubble(
+    msg: ChatMessage,
+    isAiMessage: Boolean = false,
+    isSpeaking: Boolean = false,
+    onToggleSpeak: (() -> Unit)? = null
+) {
     val isMe = msg.isFromMe
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -617,28 +641,66 @@ fun ChatMessageBubble(msg: ChatMessage) {
                     )
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
-                    modifier = Modifier.align(Alignment.End),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = msg.timestamp,
-                        fontSize = 10.sp,
-                        color = if (isMe) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (isMe) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.DoneAll,
-                            contentDescription = "Read",
-                            tint = Color.White.copy(alpha = 0.9f),
-                            modifier = Modifier.size(12.dp)
+                    if (isAiMessage && onToggleSpeak != null) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSpeaking) NepalCrimson.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onToggleSpeak() }
+                                .testTag("speaker_tts_button_${msg.id}")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isSpeaking) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                    contentDescription = if (isSpeaking) "Stop voice" else "Listen to voice",
+                                    tint = if (isSpeaking) NepalCrimson else ConnectNpBlue,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (isSpeaking) "Stop" else "Listen",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isSpeaking) NepalCrimson else ConnectNpBlue
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = msg.timestamp,
+                            fontSize = 10.sp,
+                            color = if (isMe) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (isMe) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.DoneAll,
+                                contentDescription = "Read",
+                                tint = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
+
