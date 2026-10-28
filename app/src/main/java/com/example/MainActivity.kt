@@ -149,7 +149,7 @@ fun ConnectNpMainApp(
     // Real-time Firestore sync for Posts
     LaunchedEffect(firestoreRepo) {
         firestoreRepo.observeAllPosts().collect { fsPosts ->
-            ConnectNpRepository.setPosts(fsPosts.map { it.toPost() })
+            ConnectNpRepository.setPosts(fsPosts.map { it.toPost() }, context)
         }
     }
 
@@ -178,6 +178,7 @@ fun ConnectNpMainApp(
     }
 
     LaunchedEffect(Unit) {
+        ConnectNpRepository.initLocalCache(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -327,7 +328,8 @@ fun ConnectNpMainApp(
                             },
                             onOpenSearch = { showSearchDialog = true },
                             onNavigateToMarketplace = { currentTab = NavigationTab.MARKETPLACE },
-                            onNavigateToReels = { currentTab = NavigationTab.REELS }
+                            onNavigateToReels = { currentTab = NavigationTab.REELS },
+                            onLoadMorePosts = { ConnectNpRepository.loadMorePosts(context) }
                         )
                     }
                     NavigationTab.REELS -> {
@@ -374,8 +376,29 @@ fun ConnectNpMainApp(
                         MarketplaceScreen(
                             items = marketItems,
                             isNepali = isNepali,
-                            onAddListing = { title, price, cat, loc, desc ->
-                                ConnectNpRepository.addMarketListing(title, price, cat, loc, desc)
+                            onAddListing = { title, price, cat, loc, desc, mediaUri ->
+                                val newItem = ConnectNpRepository.addMarketListing(
+                                    title = title,
+                                    price = price,
+                                    category = cat,
+                                    location = loc,
+                                    description = desc,
+                                    imageUrl = mediaUri?.toString()
+                                )
+                                if (mediaUri != null) {
+                                    coroutineScope.launch {
+                                        try {
+                                            val repo = ConnectNpFirestoreRepository(context)
+                                            val uploadRes = repo.uploadMediaFile(mediaUri, "marketplace", context)
+                                            val cloudUrl = uploadRes.getOrNull()
+                                            if (cloudUrl != null) {
+                                                ConnectNpRepository.updateMarketItemImage(newItem.id, cloudUrl)
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.w("MainActivity", "Marketplace image upload error: ${e.message}")
+                                        }
+                                    }
+                                }
                             },
                             onBuyEscrow = { item ->
                                 ConnectNpRepository.sendMoney("Seller: ${item.seller.name}", item.priceNpr.toDouble(), "Escrow for ${item.title}")
@@ -466,19 +489,28 @@ fun ConnectNpMainApp(
             onDismiss = { showCreatePostDialog = false },
             onSubmitPost = { content, location, mediaResId, mediaUri ->
                 val activeUser = ConnectNpRepository.getCurrentActiveUser()
-                ConnectNpRepository.addPost(
+                // Instant optimistic appearance in Feed & local cache
+                val optimisticPost = ConnectNpRepository.addPost(
                     content = content,
                     location = location,
                     mediaResId = mediaResId,
                     customAuthor = activeUser,
-                    mediaUri = mediaUri
+                    mediaUri = mediaUri,
+                    context = context
                 )
+                showCreatePostDialog = false
+
+                // Asynchronous background upload without blocking the UI
                 coroutineScope.launch {
                     try {
                         val repo = ConnectNpFirestoreRepository(context)
                         val uploadedMediaUrl = if (mediaUri != null) {
                             val uploadRes = repo.uploadMediaFile(mediaUri, "posts", context)
-                            uploadRes.getOrNull() ?: mediaUri.toString()
+                            val cloudUrl = uploadRes.getOrNull()
+                            if (cloudUrl != null) {
+                                ConnectNpRepository.updatePostMediaUrl(optimisticPost.id, cloudUrl, context)
+                            }
+                            cloudUrl ?: mediaUri.toString()
                         } else null
 
                         repo.createPost(
@@ -492,7 +524,6 @@ fun ConnectNpMainApp(
                         Log.w("MainActivity", "Firestore post error: ${e.message}")
                     }
                 }
-                showCreatePostDialog = false
             }
         )
     }

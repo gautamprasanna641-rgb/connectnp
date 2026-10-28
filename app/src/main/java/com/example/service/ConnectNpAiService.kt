@@ -21,16 +21,7 @@ object ConnectNpAiService {
 
     private const val TAG = "ConnectNpAiService"
 
-    // =========================================================================================
-    // 🔑 PASTE YOUR GOOGLE GEMINI API KEY HERE
-    // You can paste your Gemini API key from Google AI Studio (https://aistudio.google.com/app/apikey)
-    // directly into MANUAL_GEMINI_API_KEY below.
-    // If left empty, it will automatically read from the AI Studio Secrets panel / BuildConfig.GEMINI_API_KEY.
-    // =========================================================================================
-    const val MANUAL_GEMINI_API_KEY: String = "" // <-- PASTE YOUR GEMINI API KEY HERE (e.g., "AIzaSy...")
-    // =========================================================================================
-
-    // Gemini model: gemini-2.5-flash / gemini-3.8-flash
+    // Gemini model: gemini-2.5-flash
     const val MODEL_NAME = "gemini-2.5-flash"
     private const val GEMINI_ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL_NAME:generateContent"
@@ -49,31 +40,48 @@ object ConnectNpAiService {
         .build()
 
     /**
-     * Resolves the Gemini API key by checking the manual constant first,
-     * then BuildConfig (AI Studio Secrets panel), then environment variables.
+     * Resolves the Gemini API key securely from AI Studio Secrets:
+     * Checks MANUAL_GEMINI_API_KEY first, then GEMINI_API_KEY via BuildConfig / environment.
      */
     fun getResolvedApiKey(): String {
-        if (MANUAL_GEMINI_API_KEY.isNotBlank() && MANUAL_GEMINI_API_KEY != "PASTE_YOUR_KEY_HERE") {
-            return MANUAL_GEMINI_API_KEY.trim()
-        }
-        val buildKey = try {
-            BuildConfig.GEMINI_API_KEY
-        } catch (_: Exception) {
-            ""
-        }
-        if (buildKey.isNotBlank() && buildKey != "MY_GEMINI_API_KEY") {
-            return buildKey.trim()
-        }
-        val envKey = try {
-            System.getenv("GEMINI_API_KEY")
+        // 1. Check MANUAL_GEMINI_API_KEY from AI Studio Secrets panel
+        val manualKey = try {
+            val field = BuildConfig::class.java.getField("MANUAL_GEMINI_API_KEY")
+            (field.get(null) as? String)?.trim()
         } catch (_: Exception) {
             null
         }
-        return envKey?.takeIf { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }?.trim() ?: ""
+        if (!manualKey.isNullOrBlank() && manualKey != "MY_GEMINI_API_KEY" && manualKey != "PASTE_YOUR_KEY_HERE") {
+            return manualKey
+        }
+
+        // 2. Check GEMINI_API_KEY from AI Studio Secrets panel
+        val geminiKey = try {
+            val field = BuildConfig::class.java.getField("GEMINI_API_KEY")
+            (field.get(null) as? String)?.trim()
+        } catch (_: Exception) {
+            null
+        }
+        if (!geminiKey.isNullOrBlank() && geminiKey != "MY_GEMINI_API_KEY" && geminiKey != "PASTE_YOUR_KEY_HERE") {
+            return geminiKey
+        }
+
+        // 3. Fallback to runtime environment variables
+        val envManual = try { System.getenv("MANUAL_GEMINI_API_KEY") } catch (_: Exception) { null }
+        if (!envManual.isNullOrBlank() && envManual != "MY_GEMINI_API_KEY" && envManual != "PASTE_YOUR_KEY_HERE") {
+            return envManual.trim()
+        }
+
+        val envGemini = try { System.getenv("GEMINI_API_KEY") } catch (_: Exception) { null }
+        if (!envGemini.isNullOrBlank() && envGemini != "MY_GEMINI_API_KEY" && envGemini != "PASTE_YOUR_KEY_HERE") {
+            return envGemini.trim()
+        }
+
+        return ""
     }
 
     /**
-     * Generates a smart conversational AI response by calling the Google Gemini API directly using an API key.
+     * Generates a smart conversational AI response by calling the Google Gemini API directly using the Secrets API key.
      * Passes the entire multi-turn conversation history for rich contextual understanding.
      */
     suspend fun getAiResponseWithHistory(
@@ -83,8 +91,8 @@ object ConnectNpAiService {
         val apiKey = getResolvedApiKey()
 
         if (apiKey.isBlank()) {
-            Log.w(TAG, "No Gemini API key found in MANUAL_GEMINI_API_KEY or BuildConfig.GEMINI_API_KEY")
-            return@withContext "⚠️ Google Gemini API Key Required:\n\nPlease paste your Gemini API key into MANUAL_GEMINI_API_KEY at the top of ConnectNpAiService.kt, or add GEMINI_API_KEY in the AI Studio Secrets panel.\n\nYou can get a free API key at: https://aistudio.google.com/app/apikey"
+            Log.w(TAG, "No Gemini API key found in Secrets (MANUAL_GEMINI_API_KEY or GEMINI_API_KEY)")
+            return@withContext "⚠️ Google Gemini API Key Required:\n\nPlease ensure your Gemini API key is configured in the AI Studio Secrets panel under 'MANUAL_GEMINI_API_KEY' or 'GEMINI_API_KEY'.\n\nYou can get a free key at: https://aistudio.google.com/app/apikey"
         }
 
         // 1. Primary: Official Google Generative AI Client SDK

@@ -563,8 +563,61 @@ object ConnectNpRepository {
     private val _unreadNotifications = MutableStateFlow(0)
     val unreadNotifications: StateFlow<Int> = _unreadNotifications.asStateFlow()
 
-    fun setPosts(newPosts: List<Post>) {
+    private val _isLoadingMorePosts = MutableStateFlow(false)
+    val isLoadingMorePosts: StateFlow<Boolean> = _isLoadingMorePosts.asStateFlow()
+
+    private val _hasMorePosts = MutableStateFlow(true)
+    val hasMorePosts: StateFlow<Boolean> = _hasMorePosts.asStateFlow()
+
+    fun initLocalCache(context: Context) {
+        val cachedUser = com.example.util.LocalDataCache.loadCachedUserProfile(context)
+        if (cachedUser != null) {
+            _currentActiveUser.value = cachedUser
+        }
+        val cachedPosts = com.example.util.LocalDataCache.loadCachedFeed(context)
+        if (cachedPosts.isNotEmpty() && _posts.value.isEmpty()) {
+            _posts.value = cachedPosts
+        }
+    }
+
+    fun loadMorePosts(context: Context) {
+        if (_isLoadingMorePosts.value || !_hasMorePosts.value) return
+        _isLoadingMorePosts.value = true
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val repo = ConnectNpFirestoreRepository(context)
+                val morePostsResult = repo.fetchNextPagePosts(15L)
+                val morePosts = morePostsResult.getOrNull()?.map { it.toPost() } ?: emptyList()
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    if (morePosts.isEmpty()) {
+                        _hasMorePosts.value = false
+                    } else {
+                        val existingIds = _posts.value.map { it.id }.toSet()
+                        val filteredNew = morePosts.filter { it.id !in existingIds }
+                        if (filteredNew.isEmpty()) {
+                            _hasMorePosts.value = false
+                        } else {
+                            val combined = _posts.value + filteredNew
+                            _posts.value = combined
+                            com.example.util.LocalDataCache.saveCachedFeed(context, combined)
+                        }
+                    }
+                    _isLoadingMorePosts.value = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ConnectNpRepo", "loadMorePosts error: ${e.message}")
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    _isLoadingMorePosts.value = false
+                }
+            }
+        }
+    }
+
+    fun setPosts(newPosts: List<Post>, context: Context? = null) {
         _posts.value = newPosts
+        if (context != null && newPosts.isNotEmpty()) {
+            com.example.util.LocalDataCache.saveCachedFeed(context, newPosts)
+        }
     }
 
     fun setWalletBalance(balance: Double) {
@@ -692,8 +745,9 @@ object ConnectNpRepository {
         mediaResId: Int? = null,
         customAuthor: User? = null,
         mediaUri: android.net.Uri? = null,
-        mediaUrl: String? = null
-    ) {
+        mediaUrl: String? = null,
+        context: Context? = null
+    ): Post {
         val author = customAuthor ?: getCurrentActiveUser()
         val newPost = Post(
             id = "post_${System.currentTimeMillis()}",
@@ -708,7 +762,23 @@ object ConnectNpRepository {
             sharesCount = 0,
             userReaction = ReactionType.LOVE
         )
-        _posts.value = listOf(newPost) + _posts.value
+        val updated = listOf(newPost) + _posts.value
+        _posts.value = updated
+        if (context != null) {
+            com.example.util.LocalDataCache.saveCachedFeed(context, updated)
+        }
+        return newPost
+    }
+
+    fun updatePostMediaUrl(postId: String, cloudMediaUrl: String?, context: Context? = null) {
+        if (cloudMediaUrl.isNullOrBlank()) return
+        val updated = _posts.value.map { post ->
+            if (post.id == postId) post.copy(mediaUrl = cloudMediaUrl) else post
+        }
+        _posts.value = updated
+        if (context != null) {
+            com.example.util.LocalDataCache.saveCachedFeed(context, updated)
+        }
     }
 
     fun toggleReaction(postId: String, reaction: ReactionType, context: Context? = null) {
@@ -1063,7 +1133,14 @@ object ConnectNpRepository {
     }
 
     // --- Marketplace Logic ---
-    fun addMarketListing(title: String, price: Long, category: String, location: String, description: String) {
+    fun addMarketListing(
+        title: String,
+        price: Long,
+        category: String,
+        location: String,
+        description: String,
+        imageUrl: String? = null
+    ): MarketItem {
         val newItem = MarketItem(
             id = "item_${System.currentTimeMillis()}",
             title = title,
@@ -1072,11 +1149,19 @@ object ConnectNpRepository {
             location = location,
             seller = getCurrentActiveUser(),
             condition = "Brand New",
-            imageResId = R.drawable.nepal_crafts_1792096421296,
+            imageResId = if (imageUrl == null) R.drawable.nepal_crafts_1792096421296 else null,
+            imageUrl = imageUrl,
             description = description,
             isFeatured = true
         )
         _marketItems.value = listOf(newItem) + _marketItems.value
+        return newItem
+    }
+
+    fun updateMarketItemImage(itemId: String, cloudImageUrl: String) {
+        _marketItems.value = _marketItems.value.map { item ->
+            if (item.id == itemId) item.copy(imageUrl = cloudImageUrl) else item
+        }
     }
 
     const val P2P_TRANSACTION_FEE = 10.0

@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.model.MarketItem
 import com.example.ui.theme.ConnectNpBlue
@@ -36,7 +41,7 @@ import com.example.ui.theme.NepalCrimson
 fun MarketplaceScreen(
     items: List<MarketItem>,
     isNepali: Boolean,
-    onAddListing: (title: String, price: Long, category: String, location: String, description: String) -> Unit,
+    onAddListing: (title: String, price: Long, category: String, location: String, description: String, mediaUri: Uri?) -> Unit,
     onBuyEscrow: (MarketItem) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf("All") }
@@ -150,7 +155,18 @@ fun MarketplaceScreen(
                     .padding(16.dp)
                     .navigationBarsPadding()
             ) {
-                if (item.imageResId != null) {
+                if (!item.imageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = item.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                } else if (item.imageResId != null) {
                     Image(
                         painter = painterResource(id = item.imageResId),
                         contentDescription = item.title,
@@ -256,8 +272,8 @@ fun MarketplaceScreen(
         SellListingDialog(
             isNepali = isNepali,
             onDismiss = { showSellDialog = false },
-            onSubmit = { title, price, cat, loc, desc ->
-                onAddListing(title, price, cat, loc, desc)
+            onSubmit = { title, price, cat, loc, desc, uri ->
+                onAddListing(title, price, cat, loc, desc, uri)
                 showSellDialog = false
             }
         )
@@ -284,7 +300,14 @@ fun ProductCard(
                     .height(120.dp)
                     .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
             ) {
-                if (item.imageResId != null) {
+                if (!item.imageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = item.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (item.imageResId != null) {
                     Image(
                         painter = painterResource(id = item.imageResId),
                         contentDescription = item.title,
@@ -350,13 +373,22 @@ fun ProductCard(
 fun SellListingDialog(
     isNepali: Boolean,
     onDismiss: () -> Unit,
-    onSubmit: (title: String, price: Long, category: String, location: String, description: String) -> Unit
+    onSubmit: (title: String, price: Long, category: String, location: String, description: String, mediaUri: Uri?) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var priceText by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("Handicrafts") }
     var location by remember { mutableStateOf("Kathmandu, Nepal") }
     var description by remember { mutableStateOf("") }
+    var selectedMediaUri by remember { mutableStateOf<Uri?>(null) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            selectedMediaUri = uri
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -371,6 +403,49 @@ fun SellListingDialog(
                     fontSize = 16.sp
                 )
                 Spacer(modifier = Modifier.height(12.dp))
+
+                // Photo selector with preview
+                if (selectedMediaUri != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                    ) {
+                        AsyncImage(
+                            model = selectedMediaUri,
+                            contentDescription = "Listing preview",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        IconButton(
+                            onClick = { selectedMediaUri = null },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(4.dp)
+                                .size(28.dp)
+                                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove photo", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            photoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    ) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = ConnectNpBlue, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isNepali) "तस्बिर थप्नुहोस् (स्वचालित संकुचन)" else "Add Item Photo (Auto-Compressed)", fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 OutlinedTextField(
                     value = title,
@@ -409,7 +484,7 @@ fun SellListingDialog(
                     onClick = {
                         val price = priceText.toLongOrNull() ?: 1000L
                         if (title.isNotBlank()) {
-                            onSubmit(title, price, category, location, description)
+                            onSubmit(title, price, category, location, description, selectedMediaUri)
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(46.dp),

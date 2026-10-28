@@ -141,6 +141,7 @@ data class MarketItem(
     val seller: User,
     val condition: String,
     val imageResId: Int? = null,
+    val imageUrl: String? = null,
     val description: String,
     val isFeatured: Boolean = false
 )

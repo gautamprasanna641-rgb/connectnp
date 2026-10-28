@@ -61,12 +61,16 @@ fun FeedScreen(
     onOpenSearch: () -> Unit = {},
     onNavigateToMarketplace: () -> Unit,
     onNavigateToReels: () -> Unit,
-    currentUser: User? = null
+    currentUser: User? = null,
+    onLoadMorePosts: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activeUser = currentUser ?: remember { ConnectNpRepository.getCurrentActiveUser() }
     val blockedUserIds by ConnectNpRepository.blockedUserIds.collectAsState()
     val reportedPostIds by ConnectNpRepository.reportedPostIds.collectAsState()
+
+    val isLoadingMorePosts by ConnectNpRepository.isLoadingMorePosts.collectAsState()
+    val hasMorePosts by ConnectNpRepository.hasMorePosts.collectAsState()
 
     // Observe network connectivity (TASK 5)
     val connectivityObserver = remember { NetworkConnectivityObserver(context) }
@@ -77,6 +81,22 @@ fun FeedScreen(
         posts.filter { post ->
             !ConnectNpRepository.isUserBlocked(post.author.id, post.author.handle, post.author.name) &&
             post.id !in reportedPostIds
+        }
+    }
+
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val totalItemsCount = listState.layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItemsCount > 0 && lastVisibleItemIndex >= totalItemsCount - 3 && !isLoadingMorePosts && hasMorePosts
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            onLoadMorePosts()
         }
     }
 
@@ -91,6 +111,7 @@ fun FeedScreen(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
@@ -282,6 +303,23 @@ fun FeedScreen(
                     }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            if (isLoadingMorePosts) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = ConnectNpBlue,
+                            strokeWidth = 2.5.dp
+                        )
+                    }
+                }
             }
         }
     }

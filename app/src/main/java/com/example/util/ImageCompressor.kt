@@ -146,4 +146,38 @@ object ImageCompressor {
             quality = 75
         )
     }
+
+    /**
+     * Compresses post images to at most 1080x1080 at 80% JPEG quality,
+     * drastically reducing network payload from 5-15MB to ~150-250KB.
+     */
+    fun compressPostImageToBytes(
+        context: Context,
+        imageUri: Uri
+    ): ByteArray? {
+        return compressImageUriToBytes(
+            context = context,
+            imageUri = imageUri,
+            maxWidth = 1080,
+            maxHeight = 1080,
+            quality = 80
+        )
+    }
+
+    /**
+     * Compresses marketplace product images to at most 800x800 at 80% JPEG quality,
+     * ensuring fast grid loading while preserving product detail.
+     */
+    fun compressMarketplaceImageToBytes(
+        context: Context,
+        imageUri: Uri
+    ): ByteArray? {
+        return compressImageUriToBytes(
+            context = context,
+            imageUri = imageUri,
+            maxWidth = 800,
+            maxHeight = 800,
+            quality = 80
+        )
+    }
 }

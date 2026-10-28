@@ -195,7 +195,11 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
             val storageRef = FirebaseStorage.getInstance().reference.child("$folder/$fileName.$extension")
 
             val compressedBytes = if (extension == "jpg" && context != null) {
-                ImageCompressor.compressImageUriToBytes(context, mediaUri, 1280, 1280, 80)
+                when (folder) {
+                    "marketplace" -> ImageCompressor.compressMarketplaceImageToBytes(context, mediaUri)
+                    "profile_pictures" -> ImageCompressor.compressProfileImageToBytes(context, mediaUri)
+                    else -> ImageCompressor.compressPostImageToBytes(context, mediaUri)
+                } ?: ImageCompressor.compressImageUriToBytes(context, mediaUri, 1080, 1080, 80)
             } else null
 
             val contentType = if (extension == "mp4") "video/mp4" else "image/jpeg"
@@ -262,19 +266,81 @@ class ConnectNpFirestoreRepository(private val db: FirebaseFirestore) {
         )
     }
 
-    fun observeAllPosts(): Flow<List<FirestorePost>> = flow {
+    private var lastVisiblePostSnapshot: com.google.firebase.firestore.DocumentSnapshot? = null
+
+    /**
+     * Optimized real-time Feed query: ordered by createdAt descending and paginated (15 items initially).
+     * Uses automatic single-field indexing in Firestore and bounds query to avoid downloading entire collection.
+     */
+    fun observeAllPosts(pageSize: Long = 15L): Flow<List<FirestorePost>> = flow {
         val path = "posts"
         emitAll(
             db.collection(path)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(pageSize)
                 .snapshots()
                 .map { snapshot ->
-                    snapshot.toObjects(FirestorePost::class.java).sortedByDescending { it.createdAt?.seconds ?: Long.MAX_VALUE }
+                    if (!snapshot.isEmpty) {
+                        lastVisiblePostSnapshot = snapshot.documents.lastOrNull()
+                    }
+                    snapshot.toObjects(FirestorePost::class.java)
                 }
                 .catch { error ->
                     if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
-                    throw error
+                    emitAll(
+                        db.collection(path)
+                            .limit(pageSize)
+                            .snapshots()
+                            .map { snapshot ->
+                                snapshot.toObjects(FirestorePost::class.java).sortedByDescending { it.createdAt?.seconds ?: Long.MAX_VALUE }
+                            }
+                    )
                 }
         )
+    }
+
+    /**
+     * Loads the next page of 15 posts for smooth infinite scroll pagination.
+     */
+    suspend fun fetchNextPagePosts(pageSize: Long = 15L): Result<List<FirestorePost>> {
+        val path = "posts"
+        return try {
+            var query = db.collection(path)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(pageSize)
+
+            val cursor = lastVisiblePostSnapshot
+            if (cursor != null) {
+                query = query.startAfter(cursor)
+            }
+
+            val snapshot = query.get().await()
+            if (!snapshot.isEmpty) {
+                lastVisiblePostSnapshot = snapshot.documents.lastOrNull()
+            }
+            val posts = snapshot.toObjects(FirestorePost::class.java)
+            Result.success(posts)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.LIST, path)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Updates mediaUrl of a post after background Storage upload completes.
+     */
+    suspend fun updatePostMediaUrl(postId: String, mediaUrl: String): Result<Unit> {
+        val path = "posts/$postId"
+        return try {
+            db.collection("posts").document(postId).update(
+                "mediaUrl", mediaUrl,
+                "updatedAt", FieldValue.serverTimestamp()
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
     }
 
     suspend fun updateWalletBalance(newBalance: Long): Result<Unit> {
